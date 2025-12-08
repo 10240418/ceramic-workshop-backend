@@ -1,0 +1,107 @@
+# ============================================================
+# 设备配置文件 - 陶瓷车间设备信息
+# ============================================================
+# 功能: 定义所有设备的基本信息和参数
+# ============================================================
+
+# 回转窑设备 (7套)
+rotary_kilns:
+  - id: 1
+    name: "回转窑1号"
+    db_number: 6           # PLC DB块编号 (测试使用DB6)
+    zone_count: 8          # 温区数量
+    hopper_capacity: 1000  # 料仓容量 kg
+    hopper_alarm_threshold: 200  # 低重量告警阈值 kg
+    enabled: true
+    
+  - id: 2
+    name: "回转窑2号"
+    db_number: 6
+    zone_count: 8
+    hopper_capacity: 1000
+    hopper_alarm_threshold: 200
+    enabled: false          # 暂时禁用，避免重复读取
+    
+  - id: 3
+    name: "回转窑3号"
+    db_number: 6
+    zone_count: 8
+    hopper_capacity: 1000
+    hopper_alarm_threshold: 200
+    enabled: false
+    
+  - id: 4
+    name: "回转窑4号"
+    db_number: 6
+    zone_count: 8
+    hopper_capacity: 1000
+    hopper_alarm_threshold: 200
+    enabled: false
+    
+  - id: 5
+    name: "回转窑5号"
+    db_number: 6
+    zone_count: 8
+    hopper_capacity: 1000
+    hopper_alarm_threshold: 200
+    enabled: false
+    
+  - id: 6
+    name: "回转窑6号"
+    db_number: 60
+    zone_count: 8
+    hopper_capacity: 1000
+    hopper_alarm_threshold: 200
+    enabled: true
+    
+  - id: 7
+    name: "回转窑7号"
+    db_number: 70
+    zone_count: 8
+    hopper_capacity: 1000
+    hopper_alarm_threshold: 200
+    enabled: true
+
+# 辊道窑设备 (3-4套)
+roller_kilns:
+  - id: 1
+    name: "辊道窑1号"
+    db_number: 6           # 测试使用DB6
+    zone_count: 12         # 温区数量 (辊道窑较长)
+    enabled: false          # 暂时禁用
+    
+  - id: 2
+    name: "辊道窑2号"
+    db_number: 6
+    zone_count: 12
+    enabled: false
+    
+  - id: 3
+    name: "辊道窑3号"
+    db_number: 6
+    zone_count: 12
+    enabled: false          # 测试时禁用
+    
+  - id: 4
+    name: "辊道窑4号"
+    db_number: 6
+    zone_count: 12
+    enabled: false  # 备用设备
+
+# SCR设备 (2套)
+scr_equipment:
+  - id: 1
+    name: "SCR设备1号"
+    db_number: 6
+    fan_count: 4           # 风机数量
+    pump_count: 2          # 氨水泵数量
+    gas_pipeline_count: 2  # 燃气管路数量
+    enabled: false          # 测试时禁用
+    
+  - id: 2
+    name: "SCR设备2号"
+    db_number: 6
+    fan_count: 4
+    pump_count: 2
+    gas_pipeline_count: 2
+    enabled: false          # 测试时禁用

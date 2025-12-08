@@ -1,0 +1,55 @@
+# ============================================================
+# 文件说明: config.py - 应用配置管理
+# ============================================================
+# 使用 pydantic-settings 管理配置，支持环境变量和配置文件
+# 数据库架构: 仅使用 InfluxDB (时序数据) + YAML 文件 (配置数据)
+# ============================================================
+
+from functools import lru_cache
+from pydantic_settings import BaseSettings
+from typing import Optional
+
+
+class Settings(BaseSettings):
+    """应用配置"""
+    
+    # 服务器配置
+    server_host: str = "0.0.0.0"
+    server_port: int = 8080
+    debug: bool = True
+    
+    # PLC 配置
+    plc_ip: str = "192.168.50.223"
+    plc_rack: int = 0
+    plc_slot: int = 1
+    plc_timeout: int = 5000  # ms
+    plc_poll_interval: int = 5  # seconds
+    
+    # InfluxDB 配置 (唯一数据库)
+    influx_url: str = "http://localhost:8086"
+    influx_token: str = "ceramic-workshop-token"
+    influx_org: str = "ceramic-workshop"
+    influx_bucket: str = "sensor_data"
+    
+    # 配置文件路径
+    config_dir: str = "configs"
+    sensors_config_file: str = "configs/sensors.yaml"
+    devices_config_file: str = "configs/devices.yaml"
+    
+    # JWT 配置 (可选，用于后续认证)
+    secret_key: str = "ceramic-workshop-secret-key-change-in-production"
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 60 * 24  # 24小时
+    
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+
+
+# ------------------------------------------------------------
+# 获取配置单例
+# ------------------------------------------------------------
+@lru_cache()
+def get_settings() -> Settings:
+    """获取配置单例"""
+    return Settings()

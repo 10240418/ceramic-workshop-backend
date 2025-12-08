@@ -1,0 +1,26 @@
+# ============================================================
+# Ceramic Workshop Backend - Python Dependencies
+# ============================================================
+# Core Framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+
+# Database
+influxdb-client==1.40.0
+
+# PLC Communication
+python-snap7==1.3
+
+# Utilities
+python-dotenv==1.0.0
+pyyaml==6.0.1
+
+# Security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# Development
+pytest==7.4.4
+httpx==0.26.0
