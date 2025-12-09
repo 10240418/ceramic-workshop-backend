@@ -34,7 +34,7 @@ services:
       - "8080:8080"
     volumes:
       - .:/app
-      - ./configs:/app/configs
+      - ./configs:/app/configs  # YAML 配置文件
     environment:
       - PYTHONUNBUFFERED=1
       - INFLUX_URL=http://influxdb:8086

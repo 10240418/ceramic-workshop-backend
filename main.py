@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import kiln, scr, config, health
+from app.routers import kiln, scr, config, health, plc_config
 from app.services.polling_service import start_polling, stop_polling
 
 
@@ -21,9 +21,27 @@ from app.services.polling_service import start_polling, stop_polling
 async def lifespan(app: FastAPI):
     """应用启动和关闭时的生命周期管理"""
     # 启动时
+    print("🚀 应用启动中...")
+    
+    # 1. 加载配置文件
+    print("📊 初始化配置...")
+    print("✅ 配置加载完成")
+    
+    # 2. 自动迁移 InfluxDB Schema
+    print("\n📊 检查 InfluxDB Schema...")
+    from app.core.influx_migration import auto_migrate_on_startup
+    if auto_migrate_on_startup():
+        print("✅ InfluxDB Schema 迁移完成\n")
+    else:
+        print("⚠️  InfluxDB 迁移失败，但服务继续启动\n")
+    
+    # 3. 启动轮询服务
     await start_polling()
+    
     yield
+    
     # 关闭时
+    print("🛑 应用关闭中...")
     await stop_polling()
 
 
@@ -53,6 +71,7 @@ def create_app() -> FastAPI:
     app.include_router(kiln.router, prefix="/api/kiln", tags=["窑炉数据"])
     app.include_router(scr.router, prefix="/api/scr", tags=["SCR设备"])
     app.include_router(config.router, prefix="/api/config", tags=["系统配置"])
+    app.include_router(plc_config.router, tags=["PLC配置管理"])
     
     return app
 

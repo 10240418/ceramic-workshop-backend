@@ -1,0 +1,376 @@
+# ============================================================
+# PLC 数据点配置文件（动态配置模板）
+# ============================================================
+# 功能: 定义所有 PLC 数据点的详细配置
+# 支持: 动态添加、修改数据类型、偏移量、缩放等
+# ============================================================
+
+# ============================================================
+# 辊道窑数据点配置
+# ============================================================
+roller_kiln:
+  device_type: "roller_kiln"
+  measurement_prefix: "roller_kiln"  # InfluxDB Measurement 前缀
+  db_number: 100                      # PLC DB块编号
+  
+  # 数据点列表
+  data_points:
+    # -------------------- 温度数据 --------------------
+    - name: "温区1温度"
+      point_id: "zone_1_temp"
+      db_offset: 0
+      data_type: "WORD"               # WORD=uint16, DWORD=uint32, REAL=float32
+      scale: 0.1                      # 缩放因子 (实际值 = 原始值 * scale)
+      unit: "°C"
+      measurement: "roller_kiln_temp" # 存入哪个 InfluxDB Measurement
+      field_name: "temperature"       # InfluxDB Field 名称
+      tags:
+        zone_id: "1"
+      enabled: true
+    
+    - name: "温区1设定温度"
+      point_id: "zone_1_setpoint"
+      db_offset: 2
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "roller_kiln_temp"
+      field_name: "set_point"
+      tags:
+        zone_id: "1"
+      enabled: true
+    
+    - name: "温区2温度"
+      point_id: "zone_2_temp"
+      db_offset: 4
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "roller_kiln_temp"
+      field_name: "temperature"
+      tags:
+        zone_id: "2"
+      enabled: true
+    
+    - name: "温区2设定温度"
+      point_id: "zone_2_setpoint"
+      db_offset: 6
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "roller_kiln_temp"
+      field_name: "set_point"
+      tags:
+        zone_id: "2"
+      enabled: true
+    
+    # -------------------- 能耗数据 --------------------
+    - name: "总电压"
+      point_id: "voltage"
+      db_offset: 100
+      data_type: "WORD"
+      scale: 0.1
+      unit: "V"
+      measurement: "roller_kiln_energy"
+      field_name: "voltage"
+      tags: {}
+      enabled: true
+    
+    - name: "总电流"
+      point_id: "current"
+      db_offset: 102
+      data_type: "WORD"
+      scale: 0.1
+      unit: "A"
+      measurement: "roller_kiln_energy"
+      field_name: "current"
+      tags: {}
+      enabled: true
+    
+    - name: "总功率"
+      point_id: "power"
+      db_offset: 104
+      data_type: "WORD"
+      scale: 0.01
+      unit: "kW"
+      measurement: "roller_kiln_energy"
+      field_name: "power"
+      tags: {}
+      enabled: true
+    
+    - name: "累计电量"
+      point_id: "total_energy"
+      db_offset: 106
+      data_type: "DWORD"
+      scale: 0.01
+      unit: "kWh"
+      measurement: "roller_kiln_energy"
+      field_name: "total_energy"
+      tags: {}
+      enabled: true
+    
+    - name: "运行状态"
+      point_id: "status"
+      db_offset: 110
+      data_type: "BOOL"               # BOOL 类型
+      bit_offset: 0                   # 位偏移（BOOL 专用）
+      scale: 1
+      unit: ""
+      measurement: "roller_kiln_energy"
+      field_name: "status"
+      tags: {}
+      enabled: true
+
+
+# ============================================================
+# 回转窑数据点配置（模板）
+# ============================================================
+rotary_kiln:
+  device_type: "rotary_kiln"
+  measurement_prefix: "rotary_kiln"
+  db_number: 6                        # 实际使用时会被 devices.yaml 覆盖
+  
+  # 数据点列表
+  data_points:
+    # -------------------- 温度数据（8个温区）--------------------
+    - name: "温区1温度"
+      point_id: "zone_1_temp"
+      db_offset: 0
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "rotary_kiln_temp"
+      field_name: "temperature"
+      tags:
+        zone_id: "1"
+      enabled: true
+    
+    - name: "温区1设定温度"
+      point_id: "zone_1_setpoint"
+      db_offset: 2
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "rotary_kiln_temp"
+      field_name: "set_point"
+      tags:
+        zone_id: "1"
+      enabled: true
+    
+    - name: "温区2温度"
+      point_id: "zone_2_temp"
+      db_offset: 4
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "rotary_kiln_temp"
+      field_name: "temperature"
+      tags:
+        zone_id: "2"
+      enabled: true
+    
+    - name: "温区2设定温度"
+      point_id: "zone_2_setpoint"
+      db_offset: 6
+      data_type: "WORD"
+      scale: 0.1
+      unit: "°C"
+      measurement: "rotary_kiln_temp"
+      field_name: "set_point"
+      tags:
+        zone_id: "2"
+      enabled: true
+    
+    # -------------------- 能耗数据 --------------------
+    - name: "总电压"
+      point_id: "voltage"
+      db_offset: 100
+      data_type: "WORD"
+      scale: 0.1
+      unit: "V"
+      measurement: "rotary_kiln_energy"
+      field_name: "voltage"
+      tags: {}
+      enabled: true
+    
+    - name: "总电流"
+      point_id: "current"
+      db_offset: 102
+      data_type: "WORD"
+      scale: 0.1
+      unit: "A"
+      measurement: "rotary_kiln_energy"
+      field_name: "current"
+      tags: {}
+      enabled: true
+    
+    - name: "总功率"
+      point_id: "power"
+      db_offset: 104
+      data_type: "WORD"
+      scale: 0.01
+      unit: "kW"
+      measurement: "rotary_kiln_energy"
+      field_name: "power"
+      tags: {}
+      enabled: true
+    
+    # -------------------- 下料数据 --------------------
+    - name: "下料速度"
+      point_id: "feed_speed"
+      db_offset: 200
+      data_type: "WORD"
+      scale: 1
+      unit: "kg/h"
+      measurement: "rotary_kiln_feed"
+      field_name: "feed_speed"
+      tags: {}
+      enabled: true
+    
+    # -------------------- 料仓数据 --------------------
+    - name: "料仓重量"
+      point_id: "hopper_weight"
+      db_offset: 300
+      data_type: "WORD"
+      scale: 1
+      unit: "kg"
+      measurement: "rotary_kiln_hopper"
+      field_name: "weight"
+      tags:
+        hopper_id: "1"
+      enabled: true
+    
+    - name: "料仓容量"
+      point_id: "hopper_capacity"
+      db_offset: 302
+      data_type: "WORD"
+      scale: 1
+      unit: "kg"
+      measurement: "rotary_kiln_hopper"
+      field_name: "capacity"
+      tags:
+        hopper_id: "1"
+      enabled: true
+
+
+# ============================================================
+# SCR 设备数据点配置
+# ============================================================
+scr:
+  device_type: "scr"
+  measurement_prefix: "scr"
+  db_number: 200
+  
+  data_points:
+    # -------------------- 风机1数据 --------------------
+    - name: "风机1功率"
+      point_id: "fan_1_power"
+      db_offset: 0
+      data_type: "WORD"
+      scale: 0.01
+      unit: "kW"
+      measurement: "scr_fan"
+      field_name: "power"
+      tags:
+        fan_id: "1"
+      enabled: true
+    
+    - name: "风机1累计电量"
+      point_id: "fan_1_energy"
+      db_offset: 2
+      data_type: "DWORD"
+      scale: 0.01
+      unit: "kWh"
+      measurement: "scr_fan"
+      field_name: "cumulative_energy"
+      tags:
+        fan_id: "1"
+      enabled: true
+    
+    - name: "风机1运行状态"
+      point_id: "fan_1_status"
+      db_offset: 6
+      data_type: "BOOL"
+      bit_offset: 0
+      scale: 1
+      unit: ""
+      measurement: "scr_fan"
+      field_name: "status"
+      tags:
+        fan_id: "1"
+      enabled: true
+    
+    # -------------------- 氨水泵1数据 --------------------
+    - name: "氨水泵1功率"
+      point_id: "pump_1_power"
+      db_offset: 100
+      data_type: "WORD"
+      scale: 0.01
+      unit: "kW"
+      measurement: "scr_pump"
+      field_name: "power"
+      tags:
+        pump_id: "1"
+      enabled: true
+    
+    - name: "氨水泵1累计电量"
+      point_id: "pump_1_energy"
+      db_offset: 102
+      data_type: "DWORD"
+      scale: 0.01
+      unit: "kWh"
+      measurement: "scr_pump"
+      field_name: "cumulative_energy"
+      tags:
+        pump_id: "1"
+      enabled: true
+    
+    # -------------------- 燃气管路1数据 --------------------
+    - name: "燃气管路1流速"
+      point_id: "gas_1_flow"
+      db_offset: 200
+      data_type: "WORD"
+      scale: 0.1
+      unit: "m³/h"
+      measurement: "scr_gas"
+      field_name: "flow_rate"
+      tags:
+        pipeline_id: "1"
+      enabled: true
+    
+    - name: "燃气管路1累计用量"
+      point_id: "gas_1_volume"
+      db_offset: 202
+      data_type: "DWORD"
+      scale: 0.1
+      unit: "m³"
+      measurement: "scr_gas"
+      field_name: "cumulative_volume"
+      tags:
+        pipeline_id: "1"
+      enabled: true
+
+
+# ============================================================
+# 配置说明
+# ============================================================
+# 数据类型支持:
+#   - BOOL: 布尔值（需指定 bit_offset）
+#   - BYTE: 8位无符号整数 (0-255)
+#   - WORD: 16位无符号整数 (0-65535)
+#   - DWORD: 32位无符号整数 (0-4294967295)
+#   - INT: 16位有符号整数 (-32768 ~ 32767)
+#   - DINT: 32位有符号整数
+#   - REAL: 32位浮点数
+#
+# 缩放因子 (scale):
+#   - 实际值 = PLC原始值 * scale
+#   - 例如: PLC值=850, scale=0.1 → 实际温度=85.0°C
+#
+# Tags:
+#   - 用于 InfluxDB 数据分组和过滤
+#   - 如: device_id, zone_id, fan_id 等
+#
+# 启用/禁用:
+#   - enabled: true/false
+#   - 禁用的数据点不会被采集和写入数据库
