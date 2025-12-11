@@ -1,0 +1,34 @@
+# ============================================================
+# DB块映射配置文件
+# ============================================================
+# 用于配置 PLC 中各个 DB 块的映射关系
+# 修改此文件后无需修改 Python 代码，重启服务即可生效
+# ============================================================
+
+db_mappings:
+  # DB8 - 料仓设备
+  - db_number: 8
+    db_name: "DB8_Hoppers"
+    total_size: 626
+    config_file: "configs/config_hoppers.yaml"
+    parser_class: "HopperParser"
+    enabled: true
+    description: "9个料仓设备（4短+2无+3长）"
+  
+  # DB9 - 辊道窑
+  - db_number: 9
+    db_name: "DB9_RollerKiln"
+    total_size: 348
+    config_file: "configs/config_roller_kiln.yaml"
+    parser_class: "RollerKilnParser"
+    enabled: true
+    description: "辊道窑（6温度+6电表）"
+  
+  # DB10 - SCR设备和风机
+  - db_number: 10
+    db_name: "DB10_SCR_Fans"
+    total_size: 244
+    config_file: "configs/config_scr_fans.yaml"
+    parser_class: "SCRFanParser"
+    enabled: true
+    description: "SCR设备和风机（2SCR+2风机）"

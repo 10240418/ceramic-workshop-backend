@@ -11,7 +11,7 @@
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 from typing import List, Dict, Any, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 
 from config import get_settings
@@ -45,10 +45,15 @@ def write_point(measurement: str, tags: Dict[str, str], fields: Dict[str, Any], 
         point = point.tag(key, value)
     for key, value in fields.items():
         point = point.field(key, value)
+    
+    # 确保时间戳带时区信息 (UTC)
     if timestamp:
+        if timestamp.tzinfo is None:
+            # 本地时间转UTC
+            timestamp = timestamp.astimezone(timezone.utc)
         point = point.time(timestamp)
     
-    write_api.write(bucket=settings.influx_bucket, record=point)
+    write_api.write(bucket=settings.influx_bucket, org=settings.influx_org, record=point)
 
 
 # ------------------------------------------------------------
@@ -60,7 +65,7 @@ def write_points(points: List[Point]):
         return
     client = get_influx_client()
     write_api = client.write_api(write_options=SYNCHRONOUS)
-    write_api.write(bucket=settings.influx_bucket, record=points)
+    write_api.write(bucket=settings.influx_bucket, org=settings.influx_org, record=points)
 
 
 # ------------------------------------------------------------

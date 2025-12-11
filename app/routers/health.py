@@ -13,7 +13,7 @@ from datetime import datetime
 from config import get_settings
 from app.models.response import ApiResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/api", tags=["health"])
 settings = get_settings()
 
 

@@ -186,21 +186,48 @@ PRODUCTION_STATS_SCHEMA = MeasurementSchema(
     ]
 )
 
+# 模块化数据表 (配置驱动)
+MODULE_DATA_SCHEMA = MeasurementSchema(
+    name="module_data",
+    description="模块化传感器数据 (配置驱动)",
+    retention=RetentionPeriod.INFINITE,
+    tags=[
+        "device_id",       # 设备ID
+        "device_type",     # 设备类型 (rotary_kiln, roller_kiln, scr)
+        "module_name",     # 模块名称 (WeighSensor, FlowMeter, etc)
+        "sensor_type",     # 传感器类型 (自定义标签)
+    ],
+    fields=[
+        # 动态字段，由 ModuleParser 自动解析后写入
+        # 字段名格式: {结构}__{字段名}，如 BaseWeigh_GrossWeigh
+        # 所有字段均为 float 类型（数值数据）
+        FieldDefinition("_placeholder", "float", "占位符（实际字段由配置生成）", ""),
+    ]
+)
+
 # ============================================================
 # 所有 Schema 定义（注册表）
 # ============================================================
 ALL_SCHEMAS: List[MeasurementSchema] = [
+    # 窑炉设备
     ROLLER_KILN_TEMP_SCHEMA,
     ROLLER_KILN_ENERGY_SCHEMA,
     ROTARY_KILN_TEMP_SCHEMA,
     ROTARY_KILN_ENERGY_SCHEMA,
     ROTARY_KILN_FEED_SCHEMA,
     ROTARY_KILN_HOPPER_SCHEMA,
+    
+    # SCR 设备
     SCR_FAN_SCHEMA,
     SCR_PUMP_SCHEMA,
     SCR_GAS_SCHEMA,
+    
+    # 系统功能
     ALARMS_SCHEMA,
-    PRODUCTION_STATS_SCHEMA,  # 新添加的生产统计表
+    PRODUCTION_STATS_SCHEMA,
+    
+    # 模块化数据 (新增)
+    MODULE_DATA_SCHEMA,
 ]
 
 

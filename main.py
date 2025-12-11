@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import kiln, scr, config, health, plc_config
+from app.routers import health, config, hopper, roller, scr_fan
 from app.services.polling_service import start_polling, stop_polling
 
 
@@ -67,11 +67,11 @@ def create_app() -> FastAPI:
     )
     
     # 注册路由
-    app.include_router(health.router, prefix="/api", tags=["健康检查"])
-    app.include_router(kiln.router, prefix="/api/kiln", tags=["窑炉数据"])
-    app.include_router(scr.router, prefix="/api/scr", tags=["SCR设备"])
+    app.include_router(health.router)
+    app.include_router(hopper.router)
+    app.include_router(roller.router)
+    app.include_router(scr_fan.router)
     app.include_router(config.router, prefix="/api/config", tags=["系统配置"])
-    app.include_router(plc_config.router, tags=["PLC配置管理"])
     
     return app
 
@@ -81,4 +81,4 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=True)
+    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)

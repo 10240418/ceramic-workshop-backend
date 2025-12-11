@@ -1,0 +1,241 @@
+# ============================================================
+# PLC 模块配置文件 - 基础模块定义 (根据PLC实际结构更新)
+# ============================================================
+# 基于 TIA Portal 导出的 DB 块结构
+# 总大小: 约 82 bytes (0-82)
+# ============================================================
+
+modules:
+  # ============================================================
+  # 1. 称重传感器模块 (WeighSensor)
+  # ============================================================
+  # Offset: 0-13 (14 bytes)
+  # 结构: BaseWeigh (Word精度) + AdvWeigh (DWord精度)
+  - name: WeighSensor
+    description: 称重传感器模块 (包含基础和高精度数据)
+    total_size: 14
+    fields:
+      # BaseWeigh - 基础数据 (Word精度, 6 bytes)
+      - name: GrossWeight_W
+        display_name: 毛重(Word)
+        data_type: Word
+        offset: 0
+        size: 2
+        unit: kg
+        scale: 1.0
+      - name: NetWeight_W
+        display_name: 净重(Word)
+        data_type: Word
+        offset: 2
+        size: 2
+        unit: kg
+        scale: 1.0
+      - name: StatusWord
+        display_name: 状态字
+        data_type: Word
+        offset: 4
+        size: 2
+        unit: ""
+        scale: 1.0
+      # AdvWeigh - 高精度数据 (DWord精度, 8 bytes)
+      - name: GrossWeight
+        display_name: 毛重(高精度)
+        data_type: DWord
+        offset: 6
+        size: 4
+        unit: kg
+        scale: 1.0
+      - name: NetWeight
+        display_name: 净重(高精度)
+        data_type: DWord
+        offset: 10
+        size: 4
+        unit: kg
+        scale: 1.0
+
+  # ============================================================
+  # 2. 流量计模块 (FlowMeter)
+  # ============================================================
+  # Offset: 14-23 (10 bytes)
+  - name: FlowMeter
+    description: 气体流量计模块
+    total_size: 10
+    fields:
+      - name: RtFlow
+        display_name: 实时流量
+        data_type: DWord
+        offset: 0
+        size: 4
+        unit: L/min
+        scale: 1.0
+      - name: TotalFlow
+        display_name: 累计流量
+        data_type: DWord
+        offset: 4
+        size: 4
+        unit: m³
+        scale: 1.0
+      - name: TotalFlowMilli
+        display_name: 累计流量(小数)
+        data_type: Word
+        offset: 8
+        size: 2
+        unit: mL
+        scale: 1.0
+
+  # ============================================================
+  # 3. 温度传感器模块 (TemperatureSensor)
+  # ============================================================
+  # Offset: 24-25 (2 bytes)
+  - name: TemperatureSensor
+    description: 温度传感器模块
+    total_size: 2
+    fields:
+      - name: Temperature
+        display_name: 当前温度
+        data_type: Word
+        offset: 0
+        size: 2
+        unit: °C
+        scale: 0.1  # 如果是整数存储，可能需要缩放
+
+  # ============================================================
+  # 4. 电表模块 (ElectricityMeter) - 完整版
+  # ============================================================
+  # Offset: 26-81 (56 bytes = 14个Real)
+  - name: ElectricityMeter
+    description: 三相电表模块 (完整)
+    total_size: 56
+    fields:
+      # 线电压 Uab (3个Real = 12 bytes)
+      - name: Uab_0
+        display_name: A-B线电压
+        data_type: Real
+        offset: 0
+        size: 4
+        unit: V
+        scale: 1.0
+      - name: Uab_1
+        display_name: B-C线电压
+        data_type: Real
+        offset: 4
+        size: 4
+        unit: V
+        scale: 1.0
+      - name: Uab_2
+        display_name: C-A线电压
+        data_type: Real
+        offset: 8
+        size: 4
+        unit: V
+        scale: 1.0
+      
+      # 相电压 Ua (3个Real = 12 bytes)
+      - name: Ua_0
+        display_name: A相电压
+        data_type: Real
+        offset: 12
+        size: 4
+        unit: V
+        scale: 1.0
+      - name: Ua_1
+        display_name: B相电压
+        data_type: Real
+        offset: 16
+        size: 4
+        unit: V
+        scale: 1.0
+      - name: Ua_2
+        display_name: C相电压
+        data_type: Real
+        offset: 20
+        size: 4
+        unit: V
+        scale: 1.0
+      
+      # 电流 I (3个Real = 12 bytes)
+      - name: I_0
+        display_name: A相电流
+        data_type: Real
+        offset: 24
+        size: 4
+        unit: A
+        scale: 1.0
+      - name: I_1
+        display_name: B相电流
+        data_type: Real
+        offset: 28
+        size: 4
+        unit: A
+        scale: 1.0
+      - name: I_2
+        display_name: C相电流
+        data_type: Real
+        offset: 32
+        size: 4
+        unit: A
+        scale: 1.0
+      
+      # 功率 (4个Real = 16 bytes)
+      - name: Pt
+        display_name: 总有功功率
+        data_type: Real
+        offset: 36
+        size: 4
+        unit: kW
+        scale: 1.0
+      - name: Pa
+        display_name: A相有功功率
+        data_type: Real
+        offset: 40
+        size: 4
+        unit: kW
+        scale: 1.0
+      - name: Pb
+        display_name: B相有功功率
+        data_type: Real
+        offset: 44
+        size: 4
+        unit: kW
+        scale: 1.0
+      - name: Pc
+        display_name: C相有功功率
+        data_type: Real
+        offset: 48
+        size: 4
+        unit: kW
+        scale: 1.0
+      
+      # 电能 (1个Real = 4 bytes)
+      - name: ImpEp
+        display_name: 正向有功总电能
+        data_type: Real
+        offset: 52
+        size: 4
+        unit: kWh
+        scale: 1.0
+
+
+# ============================================================
+# 完整数据块布局 (单个设备)
+# ============================================================
+# Offset 0-13:  WeighSensor (14 bytes) - 基础+高精度
+# Offset 14-23: FlowMeter (10 bytes)
+# Offset 24-25: TemperatureSensor (2 bytes)
+# Offset 26-81: ElectricityMeter (56 bytes)
+# ============================================================
+# 总计: 82 bytes / 设备
+# ============================================================
+
+device_template:
+  name: "单设备完整数据块"
+  total_size: 82
+  modules:
+    - type: WeighSensor
+      offset: 0
+    - type: FlowMeter
+      offset: 14
+    - type: TemperatureSensor
+      offset: 24
+    - type: ElectricityMeter
+      offset: 26

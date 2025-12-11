@@ -124,3 +124,49 @@ def get_s7_client() -> S7Client:
             timeout_ms=settings.plc_timeout  # config.py uses plc_timeout not plc_timeout_ms
         )
     return _s7_client
+
+
+def reset_s7_client() -> None:
+    """重置S7客户端（用于配置更新后重新连接）"""
+    global _s7_client
+    if _s7_client is not None:
+        try:
+            _s7_client.disconnect()
+        except:
+            pass
+        _s7_client = None
+
+
+def update_s7_client(ip: str = None, rack: int = None, slot: int = None, timeout_ms: int = None) -> S7Client:
+    """更新S7客户端配置并重新创建实例
+    
+    Args:
+        ip: 新的 PLC IP 地址
+        rack: 新的机架号
+        slot: 新的插槽号
+        timeout_ms: 新的超时时间
+        
+    Returns:
+        S7Client: 新的客户端实例
+    """
+    global _s7_client
+    
+    # 断开旧连接
+    if _s7_client is not None:
+        try:
+            _s7_client.disconnect()
+        except:
+            pass
+    
+    # 获取当前配置作为默认值
+    settings = get_settings()
+    
+    # 创建新实例
+    _s7_client = S7Client(
+        ip=ip if ip is not None else settings.plc_ip,
+        rack=rack if rack is not None else settings.plc_rack,
+        slot=slot if slot is not None else settings.plc_slot,
+        timeout_ms=timeout_ms if timeout_ms is not None else settings.plc_timeout
+    )
+    
+    return _s7_client

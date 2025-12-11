@@ -1,0 +1,231 @@
+# ============================================================
+# DB8 数据块配置 - 料仓设备 (根据新基础模块更新)
+# ============================================================
+# 模块大小 (来自 plc_modules_updated.yaml):
+#   - WeighSensor: 14 bytes
+#   - TemperatureSensor: 2 bytes
+#   - ElectricityMeter: 56 bytes
+#
+# 设备清单:
+#   - 短料仓 (4个): 重量(14) + 温度(2) + 电表(56) = 72字节/个
+#   - 无料仓 (2个): 温度(2) + 电表(56) = 58字节/个
+#   - 长料仓 (3个): 重量(14) + 温度1(2) + 温度2(2) + 电表(56) = 74字节/个
+# 
+# DB6总大小: 4*72 + 2*58 + 3*74 = 288 + 116 + 222 = 626字节
+# ============================================================
+
+db_config:
+  db_number: 8
+  db_name: "DB8_Hoppers"
+  total_size: 626
+  description: "料仓设备数据块"
+
+# ============================================================
+# 短料仓 (4个) - 每个72字节
+# 模块顺序: WeighSensor(14) + TemperatureSensor(2) + ElectricityMeter(56)
+# ============================================================
+short_hoppers:
+  - device_id: "short_hopper_1"
+    device_name: "1号短料仓"
+    device_type: "short_hopper"
+    start_offset: 0
+    total_size: 72
+    modules:
+      - module_type: "WeighSensor"
+        offset: 0
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 14
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 16
+        size: 56
+        tag: "meter"
+  
+  - device_id: "short_hopper_2"
+    device_name: "2号短料仓"
+    device_type: "short_hopper"
+    start_offset: 72
+    total_size: 72
+    modules:
+      - module_type: "WeighSensor"
+        offset: 72
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 86
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 88
+        size: 56
+        tag: "meter"
+  
+  - device_id: "short_hopper_3"
+    device_name: "3号短料仓"
+    device_type: "short_hopper"
+    start_offset: 144
+    total_size: 72
+    modules:
+      - module_type: "WeighSensor"
+        offset: 144
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 158
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 160
+        size: 56
+        tag: "meter"
+  
+  - device_id: "short_hopper_4"
+    device_name: "4号短料仓"
+    device_type: "short_hopper"
+    start_offset: 216
+    total_size: 72
+    modules:
+      - module_type: "WeighSensor"
+        offset: 216
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 230
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 232
+        size: 56
+        tag: "meter"
+
+# ============================================================
+# 无料仓 (2个) - 每个58字节
+# 模块顺序: TemperatureSensor(2) + ElectricityMeter(56)
+# 起始偏移: 4*72 = 288
+# ============================================================
+no_hoppers:
+  - device_id: "no_hopper_1"
+    device_name: "1号无料仓"
+    device_type: "no_hopper"
+    start_offset: 288
+    total_size: 58
+    modules:
+      - module_type: "TemperatureSensor"
+        offset: 288
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 290
+        size: 56
+        tag: "meter"
+  
+  - device_id: "no_hopper_2"
+    device_name: "2号无料仓"
+    device_type: "no_hopper"
+    start_offset: 346
+    total_size: 58
+    modules:
+      - module_type: "TemperatureSensor"
+        offset: 346
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 348
+        size: 56
+        tag: "meter"
+
+# ============================================================
+# 长料仓 (3个) - 每个74字节
+# 模块顺序: WeighSensor(14) + TemperatureSensor(2) + TemperatureSensor(2) + ElectricityMeter(56)
+# 起始偏移: 288 + 2*58 = 404
+# ============================================================
+long_hoppers:
+  - device_id: "long_hopper_1"
+    device_name: "1号长料仓"
+    device_type: "long_hopper"
+    start_offset: 404
+    total_size: 74
+    modules:
+      - module_type: "WeighSensor"
+        offset: 404
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 418
+        size: 2
+        tag: "temp1"
+      - module_type: "TemperatureSensor"
+        offset: 420
+        size: 2
+        tag: "temp2"
+      - module_type: "ElectricityMeter"
+        offset: 422
+        size: 56
+        tag: "meter"
+  
+  - device_id: "long_hopper_2"
+    device_name: "2号长料仓"
+    device_type: "long_hopper"
+    start_offset: 478
+    total_size: 74
+    modules:
+      - module_type: "WeighSensor"
+        offset: 478
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 492
+        size: 2
+        tag: "temp1"
+      - module_type: "TemperatureSensor"
+        offset: 494
+        size: 2
+        tag: "temp2"
+      - module_type: "ElectricityMeter"
+        offset: 496
+        size: 56
+        tag: "meter"
+  
+  - device_id: "long_hopper_3"
+    device_name: "3号长料仓"
+    device_type: "long_hopper"
+    start_offset: 552
+    total_size: 74
+    modules:
+      - module_type: "WeighSensor"
+        offset: 552
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 566
+        size: 2
+        tag: "temp1"
+      - module_type: "TemperatureSensor"
+        offset: 568
+        size: 2
+        tag: "temp2"
+      - module_type: "ElectricityMeter"
+        offset: 570
+        size: 56
+        tag: "meter"
+
+# ============================================================
+# DB6 偏移量汇总表
+# ============================================================
+# 设备           | 起始偏移 | 结束偏移 | 大小
+# ---------------|----------|----------|------
+# short_hopper_1 | 0        | 71       | 72
+# short_hopper_2 | 72       | 143      | 72
+# short_hopper_3 | 144      | 215      | 72
+# short_hopper_4 | 216      | 287      | 72
+# no_hopper_1    | 288      | 345      | 58
+# no_hopper_2    | 346      | 403      | 58
+# long_hopper_1  | 404      | 477      | 74
+# long_hopper_2  | 478      | 551      | 74
+# long_hopper_3  | 552      | 625      | 74
+# ---------------|----------|----------|------
+# 总计           | 0        | 625      | 626
+# ============================================================

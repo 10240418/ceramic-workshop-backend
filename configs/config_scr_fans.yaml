@@ -1,0 +1,105 @@
+# ============================================================
+# DB10 数据块配置 - SCR设备和风机 (根据新基础模块更新)
+# ============================================================
+# 模块大小 (来自 plc_modules_updated.yaml):
+#   - FlowMeter (燃气表): 10 bytes
+#   - ElectricityMeter: 56 bytes
+#
+# 设备清单:
+#   - SCR设备 (2个): 燃气表(10字节) + 电表(56字节) = 66字节/个
+#   - 风机 (2个): 电表(56字节) = 56字节/个
+#
+# 模块顺序: SCR1(燃气+电表) + SCR2(燃气+电表) + 风机1(电表) + 风机2(电表)
+# 
+# DB8总大小: 2*66 + 2*56 = 132 + 112 = 244字节
+# ============================================================
+
+db_config:
+  db_number: 10
+  db_name: "DB10_SCR_Fans"
+  total_size: 244
+  description: "SCR设备和风机数据块"
+
+# ============================================================
+# SCR设备 (2个) - 每个66字节
+# 模块顺序: FlowMeter(10) + ElectricityMeter(56)
+# ============================================================
+scr_devices:
+  - device_id: "scr_1"
+    device_name: "1号SCR"
+    device_type: "scr"
+    start_offset: 0
+    total_size: 66
+    modules:
+      - module_type: "FlowMeter"
+        offset: 0
+        size: 10
+        tag: "gas_meter"
+        description: "燃气表"
+      - module_type: "ElectricityMeter"
+        offset: 10
+        size: 56
+        tag: "meter"
+        description: "电表"
+  
+  - device_id: "scr_2"
+    device_name: "2号SCR"
+    device_type: "scr"
+    start_offset: 66
+    total_size: 66
+    modules:
+      - module_type: "FlowMeter"
+        offset: 66
+        size: 10
+        tag: "gas_meter"
+        description: "燃气表"
+      - module_type: "ElectricityMeter"
+        offset: 76
+        size: 56
+        tag: "meter"
+        description: "电表"
+
+# ============================================================
+# 风机 (2个) - 每个56字节
+# 模块顺序: ElectricityMeter(56)
+# 起始偏移: 2*66 = 132
+# ============================================================
+fans:
+  - device_id: "fan_1"
+    device_name: "1号风机"
+    device_type: "fan"
+    start_offset: 132
+    total_size: 56
+    modules:
+      - module_type: "ElectricityMeter"
+        offset: 132
+        size: 56
+        tag: "meter"
+        description: "风机电表"
+  
+  - device_id: "fan_2"
+    device_name: "2号风机"
+    device_type: "fan"
+    start_offset: 188
+    total_size: 56
+    modules:
+      - module_type: "ElectricityMeter"
+        offset: 188
+        size: 56
+        tag: "meter"
+        description: "风机电表"
+
+# ============================================================
+# DB8 偏移量汇总表
+# ============================================================
+# 设备    | 模块       | 偏移量  | 大小  | 说明
+# --------|------------|---------|-------|--------
+# scr_1   | gas_meter  | 0       | 10    | 1号SCR燃气表
+# scr_1   | meter      | 10      | 56    | 1号SCR电表
+# scr_2   | gas_meter  | 66      | 10    | 2号SCR燃气表
+# scr_2   | meter      | 76      | 56    | 2号SCR电表
+# fan_1   | meter      | 132     | 56    | 1号风机电表
+# fan_2   | meter      | 188     | 56    | 2号风机电表
+# --------|------------|---------|-------|--------
+# 总计    |            | 0-243   | 244   |
+# ============================================================

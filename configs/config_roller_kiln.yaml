@@ -1,0 +1,126 @@
+# ============================================================
+# DB9 数据块配置 - 辊道窑 (根据新基础模块更新)
+# ============================================================
+# 模块大小 (来自 plc_modules_updated.yaml):
+#   - TemperatureSensor: 2 bytes
+#   - ElectricityMeter: 56 bytes
+#
+# 设备清单:
+#   - 辊道窑 (1个): 6*温度(2字节) + 6*电表(56字节) = 12 + 336 = 348字节
+# 
+# DB7总大小: 348字节
+# ============================================================
+
+db_config:
+  db_number: 9
+  db_name: "DB9_RollerKiln"
+  total_size: 348
+  description: "辊道窑设备数据块"
+
+# ============================================================
+# 辊道窑 (1个) - 348字节
+# 模块顺序: 6个温度传感器(12 bytes) + 6个电表(336 bytes)
+# ============================================================
+roller_kiln:
+  device_id: "roller_kiln_1"
+  device_name: "辊道窑1号"
+  device_type: "roller_kiln"
+  start_offset: 0
+  total_size: 348
+  
+  # 6个温度传感器 (对应6个温区) - 每个2字节
+  temperature_sensors:
+    - module_type: "TemperatureSensor"
+      offset: 0
+      size: 2
+      tag: "zone1_temp"
+      description: "1号区温度"
+    
+    - module_type: "TemperatureSensor"
+      offset: 2
+      size: 2
+      tag: "zone2_temp"
+      description: "2号区温度"
+    
+    - module_type: "TemperatureSensor"
+      offset: 4
+      size: 2
+      tag: "zone3_temp"
+      description: "3号区温度"
+    
+    - module_type: "TemperatureSensor"
+      offset: 6
+      size: 2
+      tag: "zone4_temp"
+      description: "4号区温度"
+    
+    - module_type: "TemperatureSensor"
+      offset: 8
+      size: 2
+      tag: "zone5_temp"
+      description: "5号区温度"
+    
+    - module_type: "TemperatureSensor"
+      offset: 10
+      size: 2
+      tag: "zone6_temp"
+      description: "6号区温度"
+  
+  # 6个电表 (主电表 + 5个分区电表) - 每个56字节
+  electricity_meters:
+    - module_type: "ElectricityMeter"
+      offset: 12
+      size: 56
+      tag: "main_meter"
+      description: "主电表"
+    
+    - module_type: "ElectricityMeter"
+      offset: 68
+      size: 56
+      tag: "zone1_meter"
+      description: "1号区电表"
+    
+    - module_type: "ElectricityMeter"
+      offset: 124
+      size: 56
+      tag: "zone2_meter"
+      description: "2号区电表"
+    
+    - module_type: "ElectricityMeter"
+      offset: 180
+      size: 56
+      tag: "zone3_meter"
+      description: "3号区电表"
+    
+    - module_type: "ElectricityMeter"
+      offset: 236
+      size: 56
+      tag: "zone4_meter"
+      description: "4号区电表"
+    
+    - module_type: "ElectricityMeter"
+      offset: 292
+      size: 56
+      tag: "zone5_meter"
+      description: "5号区电表"
+
+# ============================================================
+# DB7 偏移量汇总表
+# ============================================================
+# 模块             | 偏移量  | 大小  | 说明
+# -----------------|---------|-------|--------
+# zone1_temp       | 0       | 2     | 1号区温度
+# zone2_temp       | 2       | 2     | 2号区温度
+# zone3_temp       | 4       | 2     | 3号区温度
+# zone4_temp       | 6       | 2     | 4号区温度
+# zone5_temp       | 8       | 2     | 5号区温度
+# zone6_temp       | 10      | 2     | 6号区温度
+# main_meter       | 12      | 56    | 主电表
+# zone1_meter      | 68      | 56    | 1号区电表
+# zone2_meter      | 124     | 56    | 2号区电表
+# zone3_meter      | 180     | 56    | 3号区电表
+# zone4_meter      | 236     | 56    | 4号区电表
+# zone5_meter      | 292     | 56    | 5号区电表
+# -----------------|---------|-------|--------
+# 总计             | 0-347   | 348   |
+# ============================================================

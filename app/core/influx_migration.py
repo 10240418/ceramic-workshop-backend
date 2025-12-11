@@ -150,12 +150,26 @@ class InfluxDBMigration:
             print(f"  📊 验证 Schema 定义...")
             
             summary = get_schema_summary()
-            print(f"  ℹ️  共定义 {summary['total_measurements']} 个 Measurements")
+            total = summary['total_measurements']
+            print(f"  ℹ️  共定义 {total} 个 Measurements:")
             
-            for m in summary['measurements']:
-                print(f"    - {m['name']}: {m['fields_count']} 字段, {m['tags_count']} 标签")
+            # 按分类显示
+            categories = {
+                "窑炉设备": ["roller_kiln_temp", "roller_kiln_energy", "rotary_kiln_temp", 
+                          "rotary_kiln_energy", "rotary_kiln_feed", "rotary_kiln_hopper"],
+                "SCR设备": ["scr_fan", "scr_pump", "scr_gas"],
+                "系统功能": ["alarms", "production_stats"],
+                "模块化数据": ["module_data"],
+            }
             
-            print("  ✅ Schema 验证通过")
+            for category, measurement_names in categories.items():
+                print(f"\n    【{category}】")
+                for m in summary['measurements']:
+                    if m['name'] in measurement_names:
+                        tags_str = f"{m['tags_count']} tags" if m['tags_count'] > 0 else "无tags"
+                        print(f"      ✓ {m['name']:<25} | {m['fields_count']} fields, {tags_str}")
+            
+            print(f"\n  ✅ Schema 验证通过 (共 {total} 个表)")
             return True
             
         except Exception as e:

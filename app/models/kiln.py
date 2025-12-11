@@ -12,7 +12,7 @@
 
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Dict
 from enum import Enum
 
 
@@ -43,14 +43,25 @@ class HopperData(BaseModel):
 # ------------------------------------------------------------
 # 3. RollerKilnRealtime - 辊道窑实时数据
 # ------------------------------------------------------------
-class RollerKilnRealtime(BaseModel):
-    """辊道窑实时数据"""
-    timestamp: datetime = Field(..., description="数据时间戳")
-    zones: List[ZoneTemp] = Field(..., description="多温区温度数据")
+class PowerMeterData(BaseModel):
+    """电表数据"""
     voltage: float = Field(..., description="电压 V")
     current: float = Field(..., description="电流 A")
     power: float = Field(..., description="功率 kW")
-    total_energy: float = Field(..., description="累计电量 kWh")
+    energy: float = Field(0.0, description="累计电量 kWh")
+
+
+class ZonePowerMeter(PowerMeterData):
+    """分区电表数据"""
+    zone_id: int = Field(..., description="分区ID")
+
+
+class RollerKilnRealtime(BaseModel):
+    """辊道窑实时数据"""
+    timestamp: str = Field(..., description="数据时间戳")
+    zones: List[ZoneTemp] = Field(..., description="多温区温度数据")
+    main_meter: Dict[str, float] = Field(..., description="总电表数据")
+    zone_meters: List[Dict[str, float]] = Field(..., description="分区电表数据")
     status: bool = Field(..., description="运行状态")
 
 
