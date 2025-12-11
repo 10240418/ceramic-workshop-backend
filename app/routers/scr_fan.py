@@ -2,12 +2,15 @@
 # 文件说明: scr_fan.py - SCR设备和风机API路由
 # ============================================================
 # 接口列表:
-# 1. GET /api/scr/list                  - 获取SCR设备列表
-# 2. GET /api/scr/{device_id}           - 获取SCR实时数据
-# 3. GET /api/scr/{device_id}/history   - 获取SCR历史数据
-# 4. GET /api/fan/list                  - 获取风机列表
-# 5. GET /api/fan/{device_id}           - 获取风机实时数据
-# 6. GET /api/fan/{device_id}/history   - 获取风机历史数据
+# 1. GET /api/scr/list                     - 获取SCR设备列表
+# 2. GET /api/scr/realtime/batch           - 批量获取所有SCR实时数据
+# 3. GET /api/scr/{device_id}              - 获取SCR实时数据
+# 4. GET /api/scr/{device_id}/history      - 获取SCR历史数据
+# 5. GET /api/fan/list                     - 获取风机列表
+# 6. GET /api/fan/realtime/batch           - 批量获取所有风机实时数据
+# 7. GET /api/fan/{device_id}              - 获取风机实时数据
+# 8. GET /api/fan/{device_id}/history      - 获取风机历史数据
+# 9. GET /api/scr-fan/realtime/batch       - 批量获取所有SCR+风机实时数据
 # ============================================================
 
 from fastapi import APIRouter, Query, Path
@@ -21,6 +24,67 @@ router = APIRouter(tags=["SCR设备和风机"])
 
 # 初始化查询服务
 query_service = HistoryQueryService()
+
+
+# ============================================================
+# 统一批量查询 API
+# ============================================================
+
+# ============================================================
+# GET /api/scr-fan/realtime/batch - 批量获取所有SCR+风机实时数据
+# ============================================================
+@router.get("/api/scr-fan/realtime/batch")
+async def get_all_scr_fan_realtime():
+    """批量获取所有SCR设备和风机的实时数据 (2 SCR + 2 风机 = 4台)
+    
+    **返回结构**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "total": 4,
+            "scr": {
+                "total": 2,
+                "devices": [...]
+            },
+            "fan": {
+                "total": 2,
+                "devices": [...]
+            }
+        }
+    }
+    ```
+    """
+    try:
+        # 查询所有SCR设备
+        scr_list = query_service.query_device_list("scr")
+        scr_data = []
+        for device in scr_list:
+            device_data = query_service.query_device_realtime(device["device_id"])
+            if device_data:
+                scr_data.append(device_data)
+        
+        # 查询所有风机设备
+        fan_list = query_service.query_device_list("fan")
+        fan_data = []
+        for device in fan_list:
+            device_data = query_service.query_device_realtime(device["device_id"])
+            if device_data:
+                fan_data.append(device_data)
+        
+        return ApiResponse.ok({
+            "total": len(scr_data) + len(fan_data),
+            "scr": {
+                "total": len(scr_data),
+                "devices": scr_data
+            },
+            "fan": {
+                "total": len(fan_data),
+                "devices": fan_data
+            }
+        })
+    except Exception as e:
+        return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
 # ============================================================
@@ -41,6 +105,54 @@ async def get_scr_list():
         return ApiResponse.ok(data)
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
+
+
+# ============================================================
+# 新增: GET /api/scr/realtime/batch - 批量获取所有SCR实时数据
+# ============================================================
+@router.get("/api/scr/realtime/batch")
+async def get_all_scr_realtime():
+    """批量获取所有SCR设备的实时数据 (2台)
+    
+    **返回结构**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "total": 2,
+            "devices": [
+                {
+                    "device_id": "scr_1",
+                    "device_type": "scr",
+                    "timestamp": "2025-12-11T10:00:00Z",
+                    "modules": {
+                        "elec": {...},
+                        "gas": {...}
+                    }
+                },
+                ...
+            ]
+        }
+    }
+    ```
+    """
+    try:
+        # 获取所有SCR设备列表
+        device_list = query_service.query_device_list("scr")
+        
+        # 并行查询所有设备的实时数据
+        devices_data = []
+        for device in device_list:
+            device_data = query_service.query_device_realtime(device["device_id"])
+            if device_data:
+                devices_data.append(device_data)
+        
+        return ApiResponse.ok({
+            "total": len(devices_data),
+            "devices": devices_data
+        })
+    except Exception as e:
+        return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
 # ============================================================
@@ -150,6 +262,53 @@ async def get_fan_list():
         return ApiResponse.ok(data)
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
+
+
+# ============================================================
+# 新增: GET /api/fan/realtime/batch - 批量获取所有风机实时数据
+# ============================================================
+@router.get("/api/fan/realtime/batch")
+async def get_all_fans_realtime():
+    """批量获取所有风机设备的实时数据 (2台)
+    
+    **返回结构**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "total": 2,
+            "devices": [
+                {
+                    "device_id": "fan_1",
+                    "device_type": "fan",
+                    "timestamp": "2025-12-11T10:00:00Z",
+                    "modules": {
+                        "elec": {...}
+                    }
+                },
+                ...
+            ]
+        }
+    }
+    ```
+    """
+    try:
+        # 获取所有风机设备列表
+        device_list = query_service.query_device_list("fan")
+        
+        # 并行查询所有设备的实时数据
+        devices_data = []
+        for device in device_list:
+            device_data = query_service.query_device_realtime(device["device_id"])
+            if device_data:
+                devices_data.append(device_data)
+        
+        return ApiResponse.ok({
+            "total": len(devices_data),
+            "devices": devices_data
+        })
+    except Exception as e:
+        return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
 # ============================================================

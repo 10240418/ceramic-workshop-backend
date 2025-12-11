@@ -3,8 +3,9 @@
 # ============================================================
 # 接口列表:
 # 1. GET /api/hopper/list              - 获取所有料仓列表
-# 2. GET /api/hopper/{device_id}       - 获取料仓实时数据
-# 3. GET /api/hopper/{device_id}/history - 获取料仓历史数据
+# 2. GET /api/hopper/realtime/batch    - 批量获取所有料仓实时数据
+# 3. GET /api/hopper/{device_id}       - 获取料仓实时数据
+# 4. GET /api/hopper/{device_id}/history - 获取料仓历史数据
 # ============================================================
 
 from fastapi import APIRouter, Query, Path
@@ -66,7 +67,91 @@ async def get_hopper_list(
 
 
 # ============================================================
-# 2. GET /api/hopper/{device_id} - 获取料仓实时数据
+# 2. GET /api/hopper/realtime/batch - 批量获取所有料仓实时数据
+# ============================================================
+@router.get("/realtime/batch")
+async def get_all_hoppers_realtime(
+    hopper_type: Optional[str] = Query(
+        None,
+        description="料仓类型筛选",
+        enum=["short_hopper", "no_hopper", "long_hopper"],
+        example="short_hopper"
+    )
+):
+    """批量获取所有料仓的实时数据（一次请求获取所有数据）
+    
+    **优势**:
+    - 🚀 一次请求获取所有料仓数据，无需9次请求
+    - 📊 适合大屏实时监控
+    - ⚡ 减少网络开销
+    
+    **返回结构**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "total": 9,
+            "devices": [
+                {
+                    "device_id": "short_hopper_1",
+                    "device_type": "short_hopper",
+                    "timestamp": "2025-12-11T10:00:00Z",
+                    "modules": {
+                        "weight": {"weight": 1234.5, "feed_rate": 12.3},
+                        "temp": {"temperature": 85.5},
+                        "elec": {"Pt": 120.5, "Ua_0": 230.2, ...}
+                    }
+                },
+                ...
+            ]
+        }
+    }
+    ```
+    
+    **示例**:
+    ```
+    GET /api/hopper/realtime/batch              # 获取所有料仓
+    GET /api/hopper/realtime/batch?hopper_type=short_hopper  # 只获取短料仓
+    ```
+    """
+    try:
+        # 获取设备列表
+        if hopper_type:
+            device_list = query_service.query_device_list(hopper_type)
+        else:
+            device_list = []
+            for htype in HOPPER_TYPES:
+                devices = query_service.query_device_list(htype)
+                if devices:
+                    device_list.extend(devices)
+        
+        # 批量查询实时数据
+        devices_data = []
+        for device_info in device_list:
+            device_id = device_info["device_id"]
+            try:
+                realtime_data = query_service.query_device_realtime(device_id)
+                if realtime_data:
+                    devices_data.append({
+                        "device_id": device_id,
+                        "device_type": device_info["device_type"],
+                        "db_number": device_info.get("db_number"),
+                        **realtime_data
+                    })
+            except Exception as e:
+                print(f"⚠️  查询 {device_id} 失败: {str(e)}")
+                continue
+        
+        return ApiResponse.ok({
+            "total": len(devices_data),
+            "devices": devices_data
+        })
+    except Exception as e:
+        return ApiResponse.fail(f"批量查询失败: {str(e)}")
+
+
+# ============================================================
+# 3. GET /api/hopper/{device_id} - 获取料仓实时数据
 # ============================================================
 @router.get("/{device_id}")
 async def get_hopper_realtime(
@@ -101,9 +186,8 @@ async def get_hopper_realtime(
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
-
 # ============================================================
-# 3. GET /api/hopper/{device_id}/history - 获取料仓历史数据
+# 4. GET /api/hopper/{device_id}/history - 获取料仓历史数据
 # ============================================================
 @router.get("/{device_id}/history")
 async def get_hopper_history(

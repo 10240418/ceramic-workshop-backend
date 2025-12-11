@@ -63,7 +63,7 @@ async def get_roller_info():
 
 
 # ============================================================
-# 2. GET /api/roller/realtime - 获取辊道窑实时数据
+# 2. GET /api/roller/realtime - 获取辊道窑实时数据（原始格式）
 # ============================================================
 @router.get("/realtime")
 async def get_roller_realtime():
@@ -83,6 +83,95 @@ async def get_roller_realtime():
         if not data:
             return ApiResponse.fail("辊道窑设备无数据")
         return ApiResponse.ok(data)
+    except Exception as e:
+        return ApiResponse.fail(f"查询失败: {str(e)}")
+
+
+# ============================================================
+# 2.1 GET /api/roller/realtime/formatted - 格式化实时数据
+# ============================================================
+@router.get("/realtime/formatted")
+async def get_roller_realtime_formatted():
+    """获取辊道窑格式化后的实时数据（前端友好格式）
+    
+    **返回结构**:
+    ```json
+    {
+      "device_id": "roller_kiln_1",
+      "timestamp": "2025-12-11T10:00:00Z",
+      "zones": [
+        {
+          "zone_id": "zone1",
+          "temperature": 820.0,
+          "power": 38.0,
+          "energy": 1250.0
+        },
+        ...
+      ],
+      "main_meter": {
+        "power": 240.0,
+        "energy": 8500.0
+      }
+    }
+    ```
+    """
+    try:
+        raw_data = query_service.query_device_realtime(ROLLER_KILN_ID)
+        if not raw_data:
+            return ApiResponse.fail("辊道窑设备无数据")
+        
+        modules = raw_data.get("modules", {})
+        
+        # 格式化温区数据
+        zones = []
+        for i in range(1, 7):
+            zone_id = f"zone{i}"
+            temp_tag = f"zone{i}_temp"
+            meter_tag = f"zone{i}_meter"
+            
+            zone_data = {
+                "zone_id": zone_id,
+                "zone_name": f"{i}号温区",
+                "temperature": modules.get(temp_tag, {}).get("fields", {}).get("temperature", 0.0),
+                "power": modules.get(meter_tag, {}).get("fields", {}).get("Pt", 0.0),
+                "energy": modules.get(meter_tag, {}).get("fields", {}).get("ImpEp", 0.0),
+                "voltage": {
+                    "Ua_0": modules.get(meter_tag, {}).get("fields", {}).get("Ua_0", 0.0),
+                    "Ua_1": modules.get(meter_tag, {}).get("fields", {}).get("Ua_1", 0.0),
+                    "Ua_2": modules.get(meter_tag, {}).get("fields", {}).get("Ua_2", 0.0),
+                },
+                "current": {
+                    "I_0": modules.get(meter_tag, {}).get("fields", {}).get("I_0", 0.0),
+                    "I_1": modules.get(meter_tag, {}).get("fields", {}).get("I_1", 0.0),
+                    "I_2": modules.get(meter_tag, {}).get("fields", {}).get("I_2", 0.0),
+                }
+            }
+            zones.append(zone_data)
+        
+        # 主电表数据
+        main_meter = modules.get("main_meter", {}).get("fields", {})
+        
+        formatted_data = {
+            "device_id": raw_data.get("device_id"),
+            "timestamp": raw_data.get("timestamp"),
+            "zones": zones,
+            "main_meter": {
+                "power": main_meter.get("Pt", 0.0),
+                "energy": main_meter.get("ImpEp", 0.0),
+                "voltage": {
+                    "Ua_0": main_meter.get("Ua_0", 0.0),
+                    "Ua_1": main_meter.get("Ua_1", 0.0),
+                    "Ua_2": main_meter.get("Ua_2", 0.0),
+                },
+                "current": {
+                    "I_0": main_meter.get("I_0", 0.0),
+                    "I_1": main_meter.get("I_1", 0.0),
+                    "I_2": main_meter.get("I_2", 0.0),
+                }
+            }
+        }
+        
+        return ApiResponse.ok(formatted_data)
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
 

@@ -58,12 +58,12 @@ class WeightConverter(BaseConverter):
         previous_weight: Optional[float] = kwargs.get('previous_weight')
         interval: float = kwargs.get('interval', self.DEFAULT_INTERVAL)
         
-        # 获取当前重量 (优先使用高精度 DWord 值)
-        current_weight = self.get_field_value(raw_data, "NetWeight", 0.0)
+        # 获取当前重量 (使用毛重 Word 精度值 GrossWeight_W)
+        current_weight = self.get_field_value(raw_data, "GrossWeight_W", 0.0)
         
-        # 如果高精度值为 0，尝试使用 Word 精度值
+        # 如果 Word 精度值为 0，尝试使用高精度 DWord 值
         if current_weight == 0:
-            current_weight = self.get_field_value(raw_data, "NetWeight_W", 0.0)
+            current_weight = self.get_field_value(raw_data, "GrossWeight", 0.0)
         
         # 计算下料速度
         feed_rate = 0.0

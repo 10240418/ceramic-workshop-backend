@@ -2,16 +2,16 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# 安装系统依赖
-RUN apt-get update && apt-get install -y \
-  gcc \
-  && rm -rf /var/lib/apt/lists/*
 
-# 复制依赖文件
+# 复制依赖文件（使用事先下载好的 Linux 版离线包）
 COPY requirements.txt .
+COPY python_packages_linux /app/python_packages
 
 # 安装Python依赖
-RUN pip install --no-cache-dir -r requirements.txt
+ENV http_proxy=""
+ENV https_proxy=""
+ENV no_proxy="*"
+RUN pip install --no-cache-dir --no-index --find-links=/app/python_packages -r requirements.txt
 
 # 复制应用代码
 COPY . .

@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, config, hopper, roller, scr_fan
+from app.routers import health, config, hopper, roller, scr_fan, devices
 from app.services.polling_service import start_polling, stop_polling
 
 
@@ -35,8 +35,16 @@ async def lifespan(app: FastAPI):
     else:
         print("⚠️  InfluxDB 迁移失败，但服务继续启动\n")
     
-    # 3. 启动轮询服务
-    await start_polling()
+    # 3. 插入模拟数据（确保 list 接口不为空）
+    # 🚫 暂时禁用：使用手动插入的测试数据
+    # print("🌱 初始化模拟数据...")
+    # from app.services.data_seeder import seed_mock_data
+    # seed_mock_data()
+    
+    # 4. 启动轮询服务
+    # 🚫 暂时禁用：避免PLC连接失败导致写入全0数据
+    # await start_polling()
+    print("ℹ️  轮询服务已禁用（使用测试数据模式）")
     
     yield
     
@@ -71,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(hopper.router)
     app.include_router(roller.router)
     app.include_router(scr_fan.router)
+    app.include_router(devices.router)
     app.include_router(config.router, prefix="/api/config", tags=["系统配置"])
     
     return app

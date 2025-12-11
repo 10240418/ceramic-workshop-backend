@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # InfluxDB 时序数据库 (唯一数据库)
   influxdb:
