@@ -12,7 +12,7 @@
 # 8. query_db_devices()           - 按DB块查询设备
 # ============================================================
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from influxdb_client import InfluxDBClient
 from functools import lru_cache
@@ -221,9 +221,15 @@ class HistoryQueryService:
         
         filter_str = ' and '.join(filters)
         
+        # 将本地时间转换为UTC时间（假设输入是本地时间）
+        # 获取本地时区偏移量并转换
+        local_tz_offset = datetime.now().astimezone().utcoffset()
+        start_utc = start - local_tz_offset if local_tz_offset else start
+        end_utc = end - local_tz_offset if local_tz_offset else end
+        
         query = f'''
         from(bucket: "{self.bucket}")
-            |> range(start: {start.isoformat()}Z, stop: {end.isoformat()}Z)
+            |> range(start: {start_utc.isoformat()}Z, stop: {end_utc.isoformat()}Z)
             |> filter(fn: (r) => {filter_str})
             |> aggregateWindow(every: {interval}, fn: mean, createEmpty: false)
             |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
@@ -359,9 +365,14 @@ class HistoryQueryService:
         
         filter_str = ' and '.join(filters)
         
+        # 将本地时间转换为UTC时间
+        local_tz_offset = datetime.now().astimezone().utcoffset()
+        start_utc = start - local_tz_offset if local_tz_offset else start
+        end_utc = end - local_tz_offset if local_tz_offset else end
+        
         query = f'''
         from(bucket: "{self.bucket}")
-            |> range(start: {start.isoformat()}Z, stop: {end.isoformat()}Z)
+            |> range(start: {start_utc.isoformat()}Z, stop: {end_utc.isoformat()}Z)
             |> filter(fn: (r) => {filter_str})
             |> aggregateWindow(every: {interval}, fn: mean, createEmpty: false)
             |> pivot(rowKey:["_time"], columnKey: ["device_id"], valueColumn: "_value")

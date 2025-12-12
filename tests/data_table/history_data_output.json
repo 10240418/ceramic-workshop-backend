@@ -1,0 +1,3742 @@
+{
+  "test_time": "2025-12-12T14:59:08.304794",
+  "time_range": {
+    "start": "2025-12-12T14:57:08.304794",
+    "end": "2025-12-12T14:59:08.304794",
+    "duration_seconds": 120,
+    "interval": "10s"
+  },
+  "hopper": {
+    "short_hopper_1": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.550000000000001
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.3
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.35
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.8
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.5
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.6
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.6
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.8
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.4
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.4
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.4
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -2.125,
+                  "weight": 1392.0
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -10.5,
+                  "weight": 1444.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -2.75,
+                  "weight": 1435.0
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -1.0,
+                  "weight": 1470.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.875,
+                  "weight": 1505.0
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 1.75,
+                  "weight": 1502.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -7.25,
+                  "weight": 1565.5
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -11.5,
+                  "weight": 1606.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -5.25,
+                  "weight": 1636.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 12.75,
+                  "weight": 1597.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.75,
+                  "weight": 1617.5
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 4.75,
+                  "weight": 1616.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "short_hopper_2": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.85
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.2
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.85
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.7
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.15
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.7
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.8
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -1.25,
+                  "weight": 1679.0
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -6.5,
+                  "weight": 1694.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -2.875,
+                  "weight": 1718.5
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.5,
+                  "weight": 1731.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -13.5,
+                  "weight": 1796.0
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -8.5,
+                  "weight": 1873.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.875,
+                  "weight": 1870.0
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -6.75,
+                  "weight": 1939.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 4.375,
+                  "weight": 1928.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -1.5,
+                  "weight": 1910.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 2.625,
+                  "weight": 1932.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.5,
+                  "weight": 1907.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "short_hopper_3": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_3/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_3",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.1
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.1
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.15
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.2
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.0
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.25
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.2
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.15
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.1
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.1
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.3
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_3/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_3",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 5.5,
+                  "weight": 2014.5
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.0,
+                  "weight": 2040.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -8.75,
+                  "weight": 2075.5
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -14.0,
+                  "weight": 2166.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 0.875,
+                  "weight": 2171.0
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -19.75,
+                  "weight": 2238.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.5,
+                  "weight": 2259.0
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -25.0,
+                  "weight": 2374.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -1.125,
+                  "weight": 2346.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 13.25,
+                  "weight": 2330.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -9.625,
+                  "weight": 2373.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 15.0,
+                  "weight": 2347.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "short_hopper_4": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_4/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_4",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.6
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.7
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.8
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.6
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.800000000000001
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.65
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.7
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.85
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.6
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/short_hopper_4/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "short_hopper_4",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.625,
+                  "weight": 1480.5
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 6.0,
+                  "weight": 1450.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -13.5,
+                  "weight": 1516.0
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 14.75,
+                  "weight": 1499.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -18.375,
+                  "weight": 1633.0
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 1.75,
+                  "weight": 1639.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.875,
+                  "weight": 1636.5
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.75,
+                  "weight": 1685.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.5,
+                  "weight": 1700.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.5,
+                  "weight": 1739.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.25,
+                  "weight": 1732.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 7.0,
+                  "weight": 1737.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "no_hopper_1": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/no_hopper_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "no_hopper_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.55
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.5
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.45
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.5
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.5
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.5
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.45
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.2
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.55
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.5
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.550000000000001
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.6
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 0,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/no_hopper_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "no_hopper_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": []
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "no_hopper_2": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/no_hopper_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "no_hopper_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.9
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.800000000000001
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.800000000000001
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.7
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.85
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.7
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.800000000000001
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.6
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.9
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 6.8
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 0,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/no_hopper_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "no_hopper_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": []
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "long_hopper_1": {
+      "temperature": {
+        "status": "success",
+        "data_count": 24,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/long_hopper_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "long_hopper_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.1
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.25
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.1
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.2
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.2
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.05
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.2
+                },
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.8
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.8
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.649999999999999
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.6
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.8
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.7
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.75
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.5
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.8
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.7
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.75
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/long_hopper_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "long_hopper_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -2.375,
+                  "weight": 2305.5
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 8.25,
+                  "weight": 2320.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -4.25,
+                  "weight": 2357.0
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -5.5,
+                  "weight": 2376.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -15.5,
+                  "weight": 2485.5
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -10.5,
+                  "weight": 2542.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -7.875,
+                  "weight": 2579.0
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -6.5,
+                  "weight": 2631.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -5.125,
+                  "weight": 2680.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -13.0,
+                  "weight": 2724.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 10.0,
+                  "weight": 2660.5
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -15.0,
+                  "weight": 2704.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "long_hopper_2": {
+      "temperature": {
+        "status": "success",
+        "data_count": 24,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/long_hopper_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "long_hopper_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.45
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.5
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.35
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.65
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.2
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.65
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.5
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.6
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.25
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.0
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.1
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.05
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.1
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.2
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.2
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.05
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.2
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 9.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/long_hopper_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "long_hopper_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 4.5,
+                  "weight": 2548.0
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -7.5,
+                  "weight": 2590.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -14.0,
+                  "weight": 2678.5
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -8.75,
+                  "weight": 2737.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -5.75,
+                  "weight": 2785.5
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -23.25,
+                  "weight": 2876.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -3.75,
+                  "weight": 2904.5
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -26.75,
+                  "weight": 3013.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 4.25,
+                  "weight": 3002.0
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -16.75,
+                  "weight": 3046.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 4.125,
+                  "weight": 2993.0
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -0.5,
+                  "weight": 3015.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "long_hopper_3": {
+      "temperature": {
+        "status": "success",
+        "data_count": 24,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/long_hopper_3/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "long_hopper_3",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.95
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.75
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.8
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.949999999999999
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.75
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.9
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp1",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 7.8
+                },
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.1
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.25
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.3
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.45
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.6
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.45
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "temp2",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 8.4
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "weight": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/hopper/long_hopper_3/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "WeighSensor",
+            "fields": "weight,feed_rate"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "long_hopper_3",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -2.375,
+                  "weight": 2788.5
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 17.0,
+                  "weight": 2743.0
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -15.75,
+                  "weight": 2834.5
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -13.0,
+                  "weight": 2921.0
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -6.875,
+                  "weight": 2958.5
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -16.75,
+                  "weight": 3043.0
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -11.5,
+                  "weight": 3108.0
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -10.5,
+                  "weight": 3177.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -5.625,
+                  "weight": 3193.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 0.75,
+                  "weight": 3219.0
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": -5.625,
+                  "weight": 3258.5
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "weight",
+                  "module_type": "WeighSensor",
+                  "feed_rate": 25.0,
+                  "weight": 3164.0
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    }
+  },
+  "roller": {
+    "zone1": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone1",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone1",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 81.25
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 80.3
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 81.6
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 82.2
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 80.30000000000001
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 82.8
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.05
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 82.7
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 82.65
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.2
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 82.7
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone1_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.8
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone1",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone1",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1264.939208984375,
+                  "Pt": 34.03299140930176
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1264.995849609375,
+                  "Pt": 33.69266891479492
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.05859375,
+                  "Pt": 37.55179405212402
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.11865234375,
+                  "Pt": 35.39717102050781
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.1796875,
+                  "Pt": 36.984697341918945
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.2420654296875,
+                  "Pt": 37.080814361572266
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.3056030273438,
+                  "Pt": 38.208200454711914
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.37353515625,
+                  "Pt": 41.96049499511719
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.4428100585938,
+                  "Pt": 41.12405967712402
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.5103759765625,
+                  "Pt": 40.86714553833008
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.5808715820312,
+                  "Pt": 41.80723571777344
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone1_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1265.6517333984375,
+                  "Pt": 43.59982681274414
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "zone2": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone2",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone2",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.65
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.7
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.8
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.1
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.65
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.4
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.85
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.5
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.5
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.2
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.8
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone2_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.9
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone2",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone2",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.529541015625,
+                  "Pt": 39.921390533447266
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.596923828125,
+                  "Pt": 40.38524627685547
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.666259765625,
+                  "Pt": 41.7161808013916
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.734375,
+                  "Pt": 40.34236145019531
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.8033447265625,
+                  "Pt": 41.63368034362793
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.8724365234375,
+                  "Pt": 40.979087829589844
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1396.9464721679688,
+                  "Pt": 44.373422622680664
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1397.022216796875,
+                  "Pt": 46.0471305847168
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1397.0983276367188,
+                  "Pt": 45.40385627746582
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1397.1719970703125,
+                  "Pt": 44.01618576049805
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1397.2479248046875,
+                  "Pt": 45.464698791503906
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone2_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1397.3262939453125,
+                  "Pt": 47.86485290527344
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "zone3": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone3",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone3",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.30000000000001
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.5
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.6
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.8
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.35
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.7
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.85
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.9
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 90.05
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 90.4
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.19999999999999
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone3_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.8
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone3",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone3",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1537.6928100585938,
+                  "Pt": 40.620784759521484
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1537.763427734375,
+                  "Pt": 43.709228515625
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1537.8341674804688,
+                  "Pt": 43.08793830871582
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1537.9095458984375,
+                  "Pt": 45.34885025024414
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1537.9822998046875,
+                  "Pt": 44.00437545776367
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.0587158203125,
+                  "Pt": 46.21076965332031
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.1373901367188,
+                  "Pt": 47.51973342895508
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.2161865234375,
+                  "Pt": 46.682918548583984
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.296142578125,
+                  "Pt": 47.73224067687988
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.3751220703125,
+                  "Pt": 47.514198303222656
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.45703125,
+                  "Pt": 49.045949935913086
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone3_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1538.5374755859375,
+                  "Pt": 48.11260986328125
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "zone4": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone4",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone4",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.6
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 88.9
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 91.05
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.1
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 88.55
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.4
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 90.19999999999999
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 89.0
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 90.30000000000001
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 92.4
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 90.75
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone4_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 90.2
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone4",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone4",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1698.8915405273438,
+                  "Pt": 45.987104415893555
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1698.9666748046875,
+                  "Pt": 44.61397171020508
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.0425415039062,
+                  "Pt": 45.839887619018555
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.119384765625,
+                  "Pt": 45.750755310058594
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.196533203125,
+                  "Pt": 46.589271545410156
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.2781982421875,
+                  "Pt": 49.80765914916992
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.3615112304688,
+                  "Pt": 50.3189754486084
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.4444580078125,
+                  "Pt": 48.981895446777344
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.5308837890625,
+                  "Pt": 51.483638763427734
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.615966796875,
+                  "Pt": 51.4072151184082
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.70361328125,
+                  "Pt": 52.14761924743652
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone4_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1699.7911376953125,
+                  "Pt": 53.33369445800781
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "zone5": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone5",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone5",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.15
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.4
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.4
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.5
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 88.05000000000001
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.8
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.2
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 88.1
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.6
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 86.8
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 87.35
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone5_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 88.8
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone5",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone5",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.2967529296875,
+                  "Pt": 42.10708045959473
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.3673095703125,
+                  "Pt": 42.51290512084961
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.4373779296875,
+                  "Pt": 42.49507522583008
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.5096435546875,
+                  "Pt": 43.17501449584961
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.5818481445312,
+                  "Pt": 43.36591720581055
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.6544189453125,
+                  "Pt": 43.48276901245117
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.7299194335938,
+                  "Pt": 45.04157257080078
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.8056640625,
+                  "Pt": 46.08183288574219
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.8827514648438,
+                  "Pt": 46.840776443481445
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1467.964111328125,
+                  "Pt": 48.873504638671875
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1468.0445556640625,
+                  "Pt": 48.538137435913086
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone5_meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 1468.125244140625,
+                  "Pt": 48.006629943847656
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "zone6": {
+      "temperature": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone6",
+            "module_type": "TemperatureSensor",
+            "fields": "temperature"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone6",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 82.30000000000001
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.4
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.55
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 84.1
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 84.6
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.7
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 84.75
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.7
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.8
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 83.7
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 84.80000000000001
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "zone6_temp",
+                  "module_type": "TemperatureSensor",
+                  "temperature": 85.7
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "power": {
+        "status": "success",
+        "data_count": 0,
+        "response": {
+          "url": "http://localhost:8080/api/roller/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "zone": "zone6",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "roller_kiln_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "zone": "zone6",
+              "data": []
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    }
+  },
+  "scr": {
+    "scr_1": {
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/scr/scr_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "scr_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.0220718383789,
+                  "Pt": 24.98099422454834
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.06417846679688,
+                  "Pt": 25.605403900146484
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.10684967041016,
+                  "Pt": 26.081669807434082
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.15081787109375,
+                  "Pt": 25.812925338745117
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.19670867919922,
+                  "Pt": 27.496386528015137
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.24327087402344,
+                  "Pt": 28.206106185913086
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.28997802734375,
+                  "Pt": 28.349329948425293
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.3382568359375,
+                  "Pt": 28.786672592163086
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.39051055908203,
+                  "Pt": 31.3575439453125
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.44122314453125,
+                  "Pt": 29.96048927307129
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.4916763305664,
+                  "Pt": 30.177764892578125
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 211.54083251953125,
+                  "Pt": 29.291000366210938
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "scr_2": {
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/scr/scr_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "scr_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.5688934326172,
+                  "Pt": 29.234654426574707
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.619140625,
+                  "Pt": 30.581756591796875
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.6692657470703,
+                  "Pt": 30.165023803710938
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.7218017578125,
+                  "Pt": 32.08014678955078
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.77655029296875,
+                  "Pt": 33.063188552856445
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.8297424316406,
+                  "Pt": 30.997194290161133
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.8861541748047,
+                  "Pt": 33.50828742980957
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.9418640136719,
+                  "Pt": 33.90156173706055
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 312.99708557128906,
+                  "Pt": 33.3548526763916
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 313.0554504394531,
+                  "Pt": 35.53057098388672
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 313.1158905029297,
+                  "Pt": 35.959957122802734
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 313.17474365234375,
+                  "Pt": 35.42353439331055
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    }
+  },
+  "fan": {
+    "fan_1": {
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/fan/fan_1/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "fan_1",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 521.5695495605469,
+                  "Pt": 49.93657684326172
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 521.6544189453125,
+                  "Pt": 51.235191345214844
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 521.7426452636719,
+                  "Pt": 52.40925598144531
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 521.8297119140625,
+                  "Pt": 52.9912223815918
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 521.9175720214844,
+                  "Pt": 52.852901458740234
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.0103149414062,
+                  "Pt": 56.81926345825195
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.1054382324219,
+                  "Pt": 56.99590301513672
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.202392578125,
+                  "Pt": 58.88147735595703
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.3016357421875,
+                  "Pt": 59.916107177734375
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.4014892578125,
+                  "Pt": 59.35027313232422
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.504638671875,
+                  "Pt": 61.88790702819824
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 522.6052856445312,
+                  "Pt": 59.64747619628906
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    },
+    "fan_2": {
+      "power": {
+        "status": "success",
+        "data_count": 12,
+        "response": {
+          "url": "http://localhost:8080/api/fan/fan_2/history",
+          "params": {
+            "start": "2025-12-12T14:57:08.304794",
+            "end": "2025-12-12T14:59:08.304794",
+            "interval": "10s",
+            "module_type": "ElectricityMeter",
+            "fields": "Pt,ImpEp"
+          },
+          "status_code": 200,
+          "response": {
+            "success": true,
+            "data": {
+              "device_id": "fan_2",
+              "time_range": {
+                "start": "2025-12-12T14:57:08.304794",
+                "end": "2025-12-12T14:59:08.304794"
+              },
+              "interval": "10s",
+              "data": [
+                {
+                  "time": "2025-12-12T06:57:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.3211669921875,
+                  "Pt": 56.52506637573242
+                },
+                {
+                  "time": "2025-12-12T06:57:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.4163208007812,
+                  "Pt": 56.56241989135742
+                },
+                {
+                  "time": "2025-12-12T06:57:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.5146179199219,
+                  "Pt": 59.38037872314453
+                },
+                {
+                  "time": "2025-12-12T06:57:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.616943359375,
+                  "Pt": 61.80340576171875
+                },
+                {
+                  "time": "2025-12-12T06:58:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.7180786132812,
+                  "Pt": 60.60468101501465
+                },
+                {
+                  "time": "2025-12-12T06:58:10+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.8232421875,
+                  "Pt": 64.44200897216797
+                },
+                {
+                  "time": "2025-12-12T06:58:20+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 724.9274597167969,
+                  "Pt": 62.83436393737793
+                },
+                {
+                  "time": "2025-12-12T06:58:30+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 725.0369873046875,
+                  "Pt": 66.71206665039062
+                },
+                {
+                  "time": "2025-12-12T06:58:40+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 725.148681640625,
+                  "Pt": 66.69002151489258
+                },
+                {
+                  "time": "2025-12-12T06:58:50+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 725.261474609375,
+                  "Pt": 68.63784790039062
+                },
+                {
+                  "time": "2025-12-12T06:59:00+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 725.3728332519531,
+                  "Pt": 67.15983581542969
+                },
+                {
+                  "time": "2025-12-12T06:59:08.304794+00:00",
+                  "module_tag": "meter",
+                  "module_type": "ElectricityMeter",
+                  "ImpEp": 725.4876098632812,
+                  "Pt": 69.21182250976562
+                }
+              ]
+            },
+            "error": null
+          },
+          "error": null
+        }
+      }
+    }
+  },
+  "summary": {
+    "total_tests": 34,
+    "success": 31,
+    "failed": 0,
+    "empty_data": 3
+  }
+}
