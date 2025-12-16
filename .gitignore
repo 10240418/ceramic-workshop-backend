@@ -58,3 +58,5 @@ htmlcov/
 # Docker volumes
 influxdb_data/
 mysql_data/
+/deploy
+/backups

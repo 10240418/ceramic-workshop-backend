@@ -12,6 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import health, config, hopper, roller, scr_fan, devices
 from app.services.polling_service import start_polling, stop_polling
+from config import get_settings
+
+settings = get_settings()
 
 
 # ------------------------------------------------------------
@@ -41,16 +44,20 @@ async def lifespan(app: FastAPI):
     # from app.services.data_seeder import seed_mock_data
     # seed_mock_data()
     
-    # 4. 启动轮询服务
-    # 🚫 暂时禁用：避免PLC连接失败导致写入全0数据
-    # await start_polling()
-    print("ℹ️  轮询服务已禁用（使用测试数据模式）")
+    # 4. 启动轮询服务 (根据环境变量决定是否启用)
+    if settings.enable_polling:
+        await start_polling()
+        print("✅ 轮询服务已启动")
+    else:
+        print("ℹ️  轮询服务已禁用 (ENABLE_POLLING=false)")
+        print("   数据将由外部mock服务提供")
     
     yield
     
     # 关闭时
     print("🛑 应用关闭中...")
-    await stop_polling()
+    if settings.enable_polling:
+        await stop_polling()
 
 
 # ------------------------------------------------------------

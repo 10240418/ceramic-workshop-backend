@@ -23,7 +23,7 @@ services:
         limits:
           memory: 1G
 
-  # Python Backend
+  # Python Backend (API服务，不启用轮询)
   backend:
     build: .
     container_name: ceramic-backend
@@ -41,9 +41,27 @@ services:
       - INFLUX_TOKEN=ceramic-workshop-token
       - INFLUX_ORG=ceramic-workshop
       - INFLUX_BUCKET=sensor_data
-      - PLC_IP=192.168.50.223
-      - PLC_RACK=0
-      - PLC_SLOT=1
+      - ENABLE_POLLING=false
+    networks:
+      - ceramic-network
+
+  # Mock数据服务 (模拟PLC轮询，写入模拟数据)
+  mock-data:
+    build: .
+    container_name: ceramic-mock-data
+    restart: unless-stopped
+    depends_on:
+      - influxdb
+    volumes:
+      - .:/app
+      - ./configs:/app/configs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=ceramic-workshop-token
+      - INFLUX_ORG=ceramic-workshop
+      - INFLUX_BUCKET=sensor_data
+    command: python tests/mock/mock_polling_service.py
     networks:
       - ceramic-network
 

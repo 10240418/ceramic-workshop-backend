@@ -172,7 +172,10 @@ async def _poll_data():
         except Exception as e:
             print(f"❌ Polling error: {e}")
         
-        await asyncio.sleep(settings.plc_poll_interval)
+        # 使用运行时配置的轮询间隔（支持热更新）
+        from app.routers.config import get_runtime_plc_config
+        plc_config = get_runtime_plc_config()
+        await asyncio.sleep(plc_config["poll_interval"])
 
 
 # ------------------------------------------------------------
@@ -187,11 +190,15 @@ async def _poll_db(db_number: int, total_size: int, timestamp: datetime):
         timestamp: 时间戳
     """
     try:
+        # 使用运行时配置（支持热更新）
+        from app.routers.config import get_runtime_plc_config
+        plc_config = get_runtime_plc_config()
+        
         plc = S7Client(
-            ip=settings.plc_ip,
-            rack=settings.plc_rack,
-            slot=settings.plc_slot,
-            timeout_ms=settings.plc_timeout
+            ip=plc_config["ip_address"],
+            rack=plc_config["rack"],
+            slot=plc_config["slot"],
+            timeout_ms=plc_config["timeout_ms"]
         )
         plc.connect()
         

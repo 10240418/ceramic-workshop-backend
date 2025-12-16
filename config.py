@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     server_port: int = 8080
     debug: bool = True
     
+    # 轮询开关 (用于docker部署时关闭轮询，由mock服务提供数据)
+    enable_polling: bool = True
+    
     # PLC 配置
     plc_ip: str = "192.168.50.223"
     plc_rack: int = 0
