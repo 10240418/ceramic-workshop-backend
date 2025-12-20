@@ -209,27 +209,28 @@ data = await service.query_device_realtime("short_hopper_1")
 
 如果下次在 Win 上启动后端遇到 python:3.11-slim 拉取/联网超时或 pip 无法访问 PyPI，按下面提示操作：
 
-1) 启动 Docker Desktop 后再动手，`docker ps` 确认 daemon OK。
-2) 先在宿主机离线下载 Linux 平台依赖：
+1. 启动 Docker Desktop 后再动手，`docker ps` 确认 daemon OK。
+2. 先在宿主机离线下载 Linux 平台依赖：
    ```powershell
    pip download --platform manylinux2014_x86_64 --python-version 311 --implementation cp --abi cp311 --only-binary=:all: -r requirements.txt -d python_packages_linux
    pip download --platform manylinux2014_x86_64 --python-version 311 --implementation cp --abi cp311 --only-binary=:all: uvloop==0.19.0 -d python_packages_linux
    ```
-3) 确保 `Dockerfile` 使用本地离线包目录：
+3. 确保 `Dockerfile` 使用本地离线包目录：
    - `COPY python_packages_linux /app/python_packages`
    - `RUN pip install --no-cache-dir --no-index --find-links=/app/python_packages -r requirements.txt`
-4) 构建镜像（不拉取）：
+4. 构建镜像（不拉取）：
    ```powershell
    docker build --pull=false -t ceramic-backend .
    docker tag ceramic-backend ceramic-workshop-backend-backend:latest
    ```
-5) 启动 Compose，跳过拉取和构建：
+5. 启动 Compose，跳过拉取和构建：
    ```powershell
    docker compose up --pull never --no-build -d
    ```
-6) 验证：`docker ps` 看到 `ceramic-backend` (8080) 与 `ceramic-influxdb` (8086) 运行，即成功。
+6. 验证：`docker ps` 看到 `ceramic-backend` (8080) 与 `ceramic-influxdb` (8086) 运行，即成功。
 
 常见原因与定位：
+
 - 拉取 `python:3.11-slim` 超时：离线预拉并 `--pull=false`/`--no-build`；必要时先 `docker pull python:3.11-slim`。
 - pip 走代理/被拦：用步骤 2 的离线包 + `--no-index`，避免联网。
 - 找不到镜像名：给本地镜像补 tag `ceramic-workshop-backend-backend:latest` 后再 `docker compose up --pull never --no-build -d`。
@@ -259,8 +260,103 @@ data = await service.query_device_realtime("short_hopper_1")
    python3 main.py                         # 启动服务
    ```
 
+## 工控机部署流程
+
+### 📁 工控机目录结构
+
+```
+D:\
+├── deploy\                          ← 部署脚本目录
+│   ├── docker-compose.yml
+│   ├── setup_services.ps1
+│   ├── setup_autostart.ps1
+│   ├── ceramic-backend.tar          ← Docker镜像（需要先导出）
+│   └── influxdb-2.7.tar             ← Docker镜像（需要先导出）
+│
+└── moliaochejian\
+    └── Release\                     ← Flutter App 目录
+        ├── ceramic_workshop_app.exe
+        ├── flutter_windows.dll
+        ├── *.dll
+        ├── data\
+        └── show_logs.ps1            ← 日志查看脚本
+```
+
+### 🚀 部署步骤（按顺序执行）
+
+```powershell
+# 1️⃣ 确保 Docker Desktop 已安装并运行
+docker ps
+
+# 2️⃣ 进入 deploy 目录，部署后端服务
+cd D:\deploy
+.\setup_services.ps1
+
+# 3️⃣ 验证后端服务运行正常
+docker ps
+# 应该看到 ceramic-backend 和 ceramic-influxdb 两个容器
+
+# 4️⃣ 配置开机自启动（可选，需要管理员权限）
+# 右键 PowerShell → 以管理员身份运行
+.\setup_autostart.ps1
+
+# 5️⃣ 启动 Flutter App
+cd D:\moliaochejian\Release
+.\ceramic_workshop_app.exe
+```
+
+### ⚠️ 部署注意事项
+
+1. **Docker 镜像导出**：如果 `deploy\` 目录下没有 `.tar` 镜像文件，需要先在开发机导出：
+
+   ```powershell
+   docker save ceramic-backend:latest -o ceramic-backend.tar
+   docker save influxdb:2.7 -o influxdb-2.7.tar
+   ```
+
+2. **首次运行**：工控机需要先安装 VC++ 运行时：
+
+   ```powershell
+   D:\moliaochejian\Release\VC_redist.x64.exe
+   ```
+
+3. **日志查看脚本**：记得把 `show_logs.ps1` 复制到 `D:\moliaochejian\Release\`
+
+### 📊 App 日志查看
+
+```powershell
+cd D:\moliaochejian\Release
+
+# 查看最后100行日志
+.\show_logs.ps1
+
+# 实时监控日志
+.\show_logs.ps1 -Follow
+
+# 只看错误
+.\show_logs.ps1 -ShowError
+
+# 只看严重错误
+.\show_logs.ps1 -Fatal
+```
+
+日志文件位置：`D:\moliaochejian\Release\data\logs\app_log_YYYY-MM-DD.log`
+
+### 🔧 崩溃排查
+
+```powershell
+# 1️⃣ 检查后端服务状态
+docker ps
+docker logs ceramic-backend --tail 50
+docker logs ceramic-influxdb --tail 50
+
+# 2️⃣ 查看 App 崩溃日志
+cd D:\moliaochejian\Release
+.\show_logs.ps1 -Fatal
+```
+
 ---
 
 中文回答我.
 命令行使用 python3 main.py 启动服务。
-你的命令行每次都需要在新的窗口执行命令,如果我已经运行了python main.py的话.
+你的命令行每次都需要在新的窗口执行命令,如果我已经运行了 python main.py 的话.

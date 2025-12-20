@@ -1,5 +1,5 @@
 services:
-  # InfluxDB 时序数据库 (唯一数据库)
+  # InfluxDB 时序数据库
   influxdb:
     image: influxdb:2.7
     container_name: ceramic-influxdb
@@ -7,8 +7,8 @@ services:
     ports:
       - '8086:8086'
     volumes:
-      - influxdb_data:/var/lib/influxdb2
-      - influxdb_config:/etc/influxdb2
+      - D:/data/influxdb_data:/var/lib/influxdb2
+      - D:/data/influxdb_config:/etc/influxdb2
     environment:
       - DOCKER_INFLUXDB_INIT_MODE=setup
       - DOCKER_INFLUXDB_INIT_USERNAME=admin
@@ -21,9 +21,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 8G
 
-  # Python Backend (API服务，不启用轮询)
+  # Python Backend (启用PLC轮询)
   backend:
     build: .
     container_name: ceramic-backend
@@ -41,35 +41,9 @@ services:
       - INFLUX_TOKEN=ceramic-workshop-token
       - INFLUX_ORG=ceramic-workshop
       - INFLUX_BUCKET=sensor_data
-      - ENABLE_POLLING=false
+      - ENABLE_POLLING=true
     networks:
       - ceramic-network
-
-  # Mock数据服务 (模拟PLC轮询，写入模拟数据)
-  mock-data:
-    build: .
-    container_name: ceramic-mock-data
-    restart: unless-stopped
-    depends_on:
-      - influxdb
-    volumes:
-      - .:/app
-      - ./configs:/app/configs
-    environment:
-      - PYTHONUNBUFFERED=1
-      - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=ceramic-workshop-token
-      - INFLUX_ORG=ceramic-workshop
-      - INFLUX_BUCKET=sensor_data
-    command: python tests/mock/mock_polling_service.py
-    networks:
-      - ceramic-network
-
-volumes:
-  influxdb_data:
-    driver: local
-  influxdb_config:
-    driver: local
 
 networks:
   ceramic-network:

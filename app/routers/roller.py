@@ -122,7 +122,7 @@ async def get_roller_realtime_formatted():
         
         modules = raw_data.get("modules", {})
         
-        # 格式化温区数据
+        # 格式化温区数据 (只保留4个电表字段: Pt, ImpEp, Ua_0, I_0)
         zones = []
         for i in range(1, 7):
             zone_id = f"zone{i}"
@@ -135,20 +135,12 @@ async def get_roller_realtime_formatted():
                 "temperature": modules.get(temp_tag, {}).get("fields", {}).get("temperature", 0.0),
                 "power": modules.get(meter_tag, {}).get("fields", {}).get("Pt", 0.0),
                 "energy": modules.get(meter_tag, {}).get("fields", {}).get("ImpEp", 0.0),
-                "voltage": {
-                    "Ua_0": modules.get(meter_tag, {}).get("fields", {}).get("Ua_0", 0.0),
-                    "Ua_1": modules.get(meter_tag, {}).get("fields", {}).get("Ua_1", 0.0),
-                    "Ua_2": modules.get(meter_tag, {}).get("fields", {}).get("Ua_2", 0.0),
-                },
-                "current": {
-                    "I_0": modules.get(meter_tag, {}).get("fields", {}).get("I_0", 0.0),
-                    "I_1": modules.get(meter_tag, {}).get("fields", {}).get("I_1", 0.0),
-                    "I_2": modules.get(meter_tag, {}).get("fields", {}).get("I_2", 0.0),
-                }
+                "voltage": modules.get(meter_tag, {}).get("fields", {}).get("Ua_0", 0.0),
+                "current": modules.get(meter_tag, {}).get("fields", {}).get("I_0", 0.0),
             }
             zones.append(zone_data)
         
-        # 主电表数据
+        # 主电表数据 (只保留4个字段)
         main_meter = modules.get("main_meter", {}).get("fields", {})
         
         formatted_data = {
@@ -158,16 +150,8 @@ async def get_roller_realtime_formatted():
             "main_meter": {
                 "power": main_meter.get("Pt", 0.0),
                 "energy": main_meter.get("ImpEp", 0.0),
-                "voltage": {
-                    "Ua_0": main_meter.get("Ua_0", 0.0),
-                    "Ua_1": main_meter.get("Ua_1", 0.0),
-                    "Ua_2": main_meter.get("Ua_2", 0.0),
-                },
-                "current": {
-                    "I_0": main_meter.get("I_0", 0.0),
-                    "I_1": main_meter.get("I_1", 0.0),
-                    "I_2": main_meter.get("I_2", 0.0),
-                }
+                "voltage": main_meter.get("Ua_0", 0.0),
+                "current": main_meter.get("I_0", 0.0),
             }
         }
         

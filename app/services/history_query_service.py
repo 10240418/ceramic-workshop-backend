@@ -46,6 +46,7 @@ class HistoryQueryService:
                 ...
             ]
         """
+        # 使用更简单的查询方式，避免 distinct 类型冲突
         filter_str = 'r["_measurement"] == "sensor_data"'
         if device_type:
             filter_str += f' and r["device_type"] == "{device_type}"'
@@ -54,8 +55,9 @@ class HistoryQueryService:
         from(bucket: "{self.bucket}")
             |> range(start: -24h)
             |> filter(fn: (r) => {filter_str})
+            |> keep(columns: ["device_id", "device_type", "db_number"])
             |> group(columns: ["device_id", "device_type", "db_number"])
-            |> distinct(column: "device_id")
+            |> first()
         '''
         
         try:
@@ -127,16 +129,20 @@ class HistoryQueryService:
                 "device_id": "short_hopper_1",
                 "timestamp": "2025-12-09T10:00:00Z",
                 "modules": {
-                    "meter": {"Uab_0": 380.5, "I_0": 12.3, ...},
-                    "temp": {"Temperature": 85.5, "SetPoint": 90.0},
-                    "weight": {"GrossWeight": 1234.5, ...}
+                    "meter": {"Pt": 120.5, "ImpEp": 1234.5, ...},
+                    "temp": {"temperature": 85.5},
+                    "weight": {"weight": 1234.5, "feed_rate": 12.3}
                 }
             }
+        
+        说明:
+            - 查询数据库中的最新数据，不限时间范围
+            - 使用 -30d 范围确保能找到数据（但只取最新的一条）
         """
-        # 查询最近24小时的最新数据
+        # 查询最近30天的最新数据（确保能找到数据，但只取最新）
         query = f'''
         from(bucket: "{self.bucket}")
-            |> range(start: -24h)
+            |> range(start: -30d)
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
             |> last()
         '''

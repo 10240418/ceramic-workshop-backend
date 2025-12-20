@@ -213,10 +213,141 @@ async def _poll_db(db_number: int, total_size: int, timestamp: datetime):
             _write_device_to_influx(device, db_number, timestamp)
         
         plc.disconnect()
-        print(f"✅ DB{db_number}: {len(devices)}个设备数据已写入")
+        
+        # 详细输出每个设备的数据
+        _print_devices_detail(devices, db_number)
     
     except Exception as e:
         print(f"❌ DB{db_number}轮询失败: {e}")
+
+
+# ------------------------------------------------------------
+# 辅助函数: 打印设备详细数据
+# ------------------------------------------------------------
+def _print_devices_detail(devices: List[Dict[str, Any]], db_number: int):
+    """打印设备详细数据
+    
+    Args:
+        devices: 设备数据列表
+        db_number: DB块号
+    """
+    from config import get_settings
+    settings = get_settings()
+    
+    # 检查是否启用详细日志
+    if not getattr(settings, 'verbose_polling_log', True):
+        print(f"✅ DB{db_number}: {len(devices)}个设备数据已写入")
+        return
+    
+    print(f"\n{'='*60}")
+    print(f"📊 DB{db_number} 轮询数据 ({len(devices)}个设备)")
+    print(f"{'='*60}")
+    
+    for device in devices:
+        device_id = device['device_id']
+        device_type = device['device_type']
+        
+        print(f"\n  📦 {device_id} ({device_type})")
+        print(f"  {'-'*50}")
+        
+        for module_tag, module_data in device['modules'].items():
+            module_type = module_data['module_type']
+            raw_fields = module_data['fields']
+            
+            # 获取转换后的数据用于显示
+            if module_type in CONVERTER_MAP:
+                converter = get_converter(module_type)
+                
+                if module_type == 'WeighSensor':
+                    cache_key = f"{device_id}:{module_tag}"
+                    previous_weight = _weight_history.get(cache_key)
+                    fields = converter.convert(
+                        raw_fields,
+                        previous_weight=previous_weight,
+                        interval=settings.plc_poll_interval
+                    )
+                else:
+                    fields = converter.convert(raw_fields)
+            else:
+                fields = {k: v['value'] for k, v in raw_fields.items()}
+            
+            # 格式化输出
+            _print_module_data(module_tag, module_type, fields)
+    
+    print(f"\n{'='*60}\n")
+
+
+def _print_module_data(module_tag: str, module_type: str, fields: Dict[str, Any]):
+    """格式化打印模块数据
+    
+    Args:
+        module_tag: 模块标签
+        module_type: 模块类型
+        fields: 转换后的字段数据
+    """
+    # 模块类型图标
+    icons = {
+        'ElectricityMeter': '⚡',
+        'TemperatureSensor': '🌡️',
+        'WeighSensor': '⚖️',
+        'GasMeter': '💨',
+    }
+    icon = icons.get(module_type, '📍')
+    
+    # 单位映射
+    units = {
+        'Pt': 'kW',
+        'ImpEp': 'kWh',
+        'Ua_0': 'V', 'Ua_1': 'V', 'Ua_2': 'V',
+        'I_0': 'A', 'I_1': 'A', 'I_2': 'A',
+        'temperature': '°C',
+        'set_point': '°C',
+        'weight': 'kg',
+        'feed_rate': 'kg/h',
+        'flow_rate': 'm³/h',
+        'total_flow': 'm³',
+    }
+    
+    print(f"    {icon} [{module_tag}] {module_type}:")
+    
+    # 按类型格式化输出
+    if module_type == 'ElectricityMeter':
+        # 电表数据: 功率、电能、电压、电流
+        pt = fields.get('Pt', 0)
+        ep = fields.get('ImpEp', 0)
+        ua = [fields.get(f'Ua_{i}', 0) for i in range(3)]
+        ia = [fields.get(f'I_{i}', 0) for i in range(3)]
+        print(f"       功率: {pt:.2f}kW | 电能: {ep:.2f}kWh")
+        print(f"       电压: {ua[0]:.1f}/{ua[1]:.1f}/{ua[2]:.1f} V")
+        print(f"       电流: {ia[0]:.2f}/{ia[1]:.2f}/{ia[2]:.2f} A")
+    
+    elif module_type == 'TemperatureSensor':
+        temp = fields.get('temperature', 0)
+        sp = fields.get('set_point', 0)
+        print(f"       温度: {temp:.1f}°C | 设定值: {sp:.1f}°C")
+    
+    elif module_type == 'WeighSensor':
+        weight = fields.get('weight', 0)
+        feed_rate = fields.get('feed_rate', 0)
+        is_stable = fields.get('is_stable', False)
+        is_overload = fields.get('is_overload', False)
+        stable_str = "稳定" if is_stable else "动态"
+        overload_str = " [超载!]" if is_overload else ""
+        print(f"       重量: {weight:.3f}kg | 下料速率: {feed_rate:.2f}kg/h | {stable_str}{overload_str}")
+    
+    elif module_type == 'GasMeter':
+        flow = fields.get('flow_rate', 0)
+        total = fields.get('total_flow', 0)
+        print(f"       流量: {flow:.2f}m³/h | 累计: {total:.2f}m³")
+    
+    else:
+        # 通用输出
+        for key, value in fields.items():
+            unit = units.get(key, '')
+            if isinstance(value, float):
+                print(f"       {key}: {value:.2f}{unit}")
+            else:
+                print(f"       {key}: {value}{unit}")
 
 
 # ------------------------------------------------------------

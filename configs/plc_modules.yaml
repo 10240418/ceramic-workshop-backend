@@ -11,43 +11,44 @@ modules:
   # ============================================================
   # Offset: 0-13 (14 bytes)
   # 结构: BaseWeigh (Word精度) + AdvWeigh (DWord精度)
+  # 注意: 重量值使用有符号整数，因为可以为负值（去皮后）
   - name: WeighSensor
     description: 称重传感器模块 (包含基础和高精度数据)
     total_size: 14
     fields:
-      # BaseWeigh - 基础数据 (Word精度, 6 bytes)
+      # BaseWeigh - 基础数据 (有符号Int精度, 6 bytes)
       - name: GrossWeight_W
         display_name: 毛重(Word)
-        data_type: Word
+        data_type: Int          # 改为有符号16位整数
         offset: 0
         size: 2
         unit: kg
         scale: 1.0
       - name: NetWeight_W
         display_name: 净重(Word)
-        data_type: Word
+        data_type: Int          
         offset: 2
         size: 2
         unit: kg
         scale: 1.0
       - name: StatusWord
         display_name: 状态字
-        data_type: Word
+        data_type: Word         
         offset: 4
         size: 2
         unit: ""
         scale: 1.0
-      # AdvWeigh - 高精度数据 (DWord精度, 8 bytes)
+      # AdvWeigh - 高精度数据 (有符号DInt精度, 8 bytes)
       - name: GrossWeight
         display_name: 毛重(高精度)
-        data_type: DWord
+        data_type: DInt         # 改为有符号32位整数
         offset: 6
         size: 4
         unit: kg
         scale: 1.0
       - name: NetWeight
         display_name: 净重(高精度)
-        data_type: DWord
+        data_type: DInt         # 改为有符号32位整数
         offset: 10
         size: 4
         unit: kg
@@ -87,17 +88,19 @@ modules:
   # 3. 温度传感器模块 (TemperatureSensor)
   # ============================================================
   # Offset: 24-25 (2 bytes)
+  # 数据类型: SINT16 (有符号16位整数)，单位 0.1摄氏度
+  # 例如: PLC存储 1500 表示 150.0°C，存储 -50 表示 -5.0°C
   - name: TemperatureSensor
-    description: 温度传感器模块
+    description: 温度传感器模块 (SINT16, 0.1°C)
     total_size: 2
     fields:
       - name: Temperature
         display_name: 当前温度
-        data_type: Word
+        data_type: Int  # 使用有符号16位整数 (SINT16)
         offset: 0
         size: 2
         unit: °C
-        scale: 0.1  # 如果是整数存储，可能需要缩放
+        scale: 1.0  # 缩放在 converter_temp.py 中处理 (乘以0.1)
 
   # ============================================================
   # 4. 电表模块 (ElectricityMeter) - 完整版

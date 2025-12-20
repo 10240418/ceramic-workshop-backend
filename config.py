@@ -21,12 +21,16 @@ class Settings(BaseSettings):
     # 轮询开关 (用于docker部署时关闭轮询，由mock服务提供数据)
     enable_polling: bool = True
     
+    # 详细轮询日志 (True: 显示每个设备的详细数据, False: 仅显示写入数量)
+    # Release模式下建议设为False，只输出rror级别和API请求日志
+    verbose_polling_log: bool = False
+    
     # PLC 配置
     plc_ip: str = "192.168.50.223"
     plc_rack: int = 0
     plc_slot: int = 1
     plc_timeout: int = 5000  # ms
-    plc_poll_interval: int = 5  # seconds
+    plc_poll_interval: int = 6  # seconds (轮询间隔)
     
     # InfluxDB 配置 (唯一数据库)
     influx_url: str = "http://localhost:8086"
