@@ -3,7 +3,7 @@
 # ============================================================
 # 接口列表:
 # 1. GET /api/roller/info              - 获取辊道窑信息
-# 2. GET /api/roller/realtime          - 获取辊道窑实时数据
+# 2. GET /api/roller/realtime          - 获取辊道窑实时数据（内存缓存）
 # 3. GET /api/roller/history           - 获取辊道窑历史数据
 # 4. GET /api/roller/zone/{zone_id}    - 获取指定温区数据
 # ============================================================
@@ -14,10 +14,15 @@ from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
 from app.services.history_query_service import HistoryQueryService
+from app.services.polling_service import (
+    get_latest_device_data,
+    get_latest_timestamp,
+    is_polling_running
+)
 
 router = APIRouter(prefix="/api/roller", tags=["辊道窑设备"])
 
-# 初始化查询服务
+# 初始化查询服务（用于历史数据）
 query_service = HistoryQueryService()
 
 # 辊道窑设备ID
@@ -63,26 +68,37 @@ async def get_roller_info():
 
 
 # ============================================================
-# 2. GET /api/roller/realtime - 获取辊道窑实时数据（原始格式）
+# 2. GET /api/roller/realtime - 获取辊道窑实时数据（内存缓存）
 # ============================================================
 @router.get("/realtime")
 async def get_roller_realtime():
-    """获取辊道窑所有温区和电表的实时数据
+    """获取辊道窑所有温区和电表的实时数据（从内存缓存读取）
+    
+    **数据来源**: 内存缓存（由轮询服务实时更新）
     
     **返回字段**:
     - 6个温区的 `temperature`
     - 6个电表的 `Pt`, `ImpEp`, `Ua_0~2`, `I_0~2`
-    
-    **示例**:
-    ```
-    GET /api/roller/realtime
-    ```
     """
     try:
+        # 优先从内存缓存读取
+        cached_data = get_latest_device_data(ROLLER_KILN_ID)
+        
+        if cached_data:
+            return ApiResponse.ok({
+                "source": "cache",
+                "polling_running": is_polling_running(),
+                **cached_data
+            })
+        
+        # 缓存无数据，查询 InfluxDB
         data = query_service.query_device_realtime(ROLLER_KILN_ID)
         if not data:
             return ApiResponse.fail("辊道窑设备无数据")
-        return ApiResponse.ok(data)
+        return ApiResponse.ok({
+            "source": "influxdb",
+            **data
+        })
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
@@ -104,43 +120,68 @@ async def get_roller_realtime_formatted():
           "zone_id": "zone1",
           "temperature": 820.0,
           "power": 38.0,
-          "energy": 1250.0
+          "energy": 1250.0,
+          "voltage": 220.0,
+          "current_a": 100.0,
+          "current_b": 100.0,
+          "current_c": 100.0
         },
         ...
       ],
       "main_meter": {
         "power": 240.0,
-        "energy": 8500.0
+        "energy": 8500.0,
+        "voltage": 220.0,
+        "current_a": 100.0,
+        "current_b": 100.0,
+        "current_c": 100.0
       }
     }
     ```
+    
+    **电流变比说明**:
+    辊道窑电流变比为60，返回的电流数据已经乘以变比后的一次侧实际电流
     """
     try:
-        raw_data = query_service.query_device_realtime(ROLLER_KILN_ID)
+        # 优先从内存缓存读取（与其他API保持一致）
+        cached_data = get_latest_device_data(ROLLER_KILN_ID)
+        
+        if cached_data:
+            raw_data = cached_data
+        else:
+            # 缓存无数据，回退到 InfluxDB 查询
+            raw_data = query_service.query_device_realtime(ROLLER_KILN_ID)
+        
         if not raw_data:
             return ApiResponse.fail("辊道窑设备无数据")
         
         modules = raw_data.get("modules", {})
         
-        # 格式化温区数据 (只保留4个电表字段: Pt, ImpEp, Ua_0, I_0)
+        # 格式化温区数据 (包含三相电压和三相电流)
         zones = []
         for i in range(1, 7):
             zone_id = f"zone{i}"
             temp_tag = f"zone{i}_temp"
             meter_tag = f"zone{i}_meter"
             
+            meter_fields = modules.get(meter_tag, {}).get("fields", {})
+            
             zone_data = {
                 "zone_id": zone_id,
                 "zone_name": f"{i}号温区",
                 "temperature": modules.get(temp_tag, {}).get("fields", {}).get("temperature", 0.0),
-                "power": modules.get(meter_tag, {}).get("fields", {}).get("Pt", 0.0),
-                "energy": modules.get(meter_tag, {}).get("fields", {}).get("ImpEp", 0.0),
-                "voltage": modules.get(meter_tag, {}).get("fields", {}).get("Ua_0", 0.0),
-                "current": modules.get(meter_tag, {}).get("fields", {}).get("I_0", 0.0),
+                "power": meter_fields.get("Pt", 0.0),
+                "energy": meter_fields.get("ImpEp", 0.0),
+                # A相电压
+                "voltage": meter_fields.get("Ua_0", 0.0),
+                # 三相电流 (已乘变比60)
+                "current_a": meter_fields.get("I_0", 0.0),
+                "current_b": meter_fields.get("I_1", 0.0),
+                "current_c": meter_fields.get("I_2", 0.0),
             }
             zones.append(zone_data)
         
-        # 主电表数据 (只保留4个字段)
+        # 主电表数据 (包含三相电压和三相电流)
         main_meter = modules.get("main_meter", {}).get("fields", {})
         
         formatted_data = {
@@ -150,8 +191,12 @@ async def get_roller_realtime_formatted():
             "main_meter": {
                 "power": main_meter.get("Pt", 0.0),
                 "energy": main_meter.get("ImpEp", 0.0),
+                # A相电压
                 "voltage": main_meter.get("Ua_0", 0.0),
-                "current": main_meter.get("I_0", 0.0),
+                # 三相电流 (已乘变比60)
+                "current_a": main_meter.get("I_0", 0.0),
+                "current_b": main_meter.get("I_1", 0.0),
+                "current_c": main_meter.get("I_2", 0.0),
             }
         }
         

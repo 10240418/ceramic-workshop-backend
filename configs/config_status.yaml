@@ -1,0 +1,318 @@
+# ============================================================
+# DB 状态位配置文件 - 设备通信状态监控
+# ============================================================
+# 根据 PLC 截图中的实际数据结构
+# MB_COMM_LOAD: DONE(0.0), ERROR(0.1), STATUS(2.0) - 4字节
+# DB_MASTER_*: DONE(x.0), BUSY(x.1), ERROR(x.2), STATUS(x+2.0) - 4字节
+# ============================================================
+
+db_config:
+  db_number: 1
+  db_name: "DB_Status"
+  description: "设备通信状态数据块"
+
+# ============================================================
+# 设备列表 - 按 PLC 表中的偏移量顺序排列
+# ============================================================
+devices:
+  # --------------------------------------------------------
+  # MB_COMM_LOAD (主通信加载状态) - offset 0
+  # --------------------------------------------------------
+  - device_id: "status_MB_COMM_LOAD"
+    offset: 0
+    module_type: "CommLoadStatus"
+    description: "status_MB_COMM_LOAD"
+
+  # --------------------------------------------------------
+  # DB_MASTER_ELEC_0 ~ DB_MASTER_ELEC_35 (电表状态) - offset 4-147
+  # --------------------------------------------------------
+  - device_id: "status_DB_MASTER_ELEC_0"
+    offset: 4
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_0"
+  - device_id: "status_DB_MASTER_ELEC_1"
+    offset: 8
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_1"
+  - device_id: "status_DB_MASTER_ELEC_2"
+    offset: 12
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_2"
+  - device_id: "status_DB_MASTER_ELEC_3"
+    offset: 16
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_3"
+  - device_id: "status_DB_MASTER_ELEC_4"
+    offset: 20
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_4"
+  - device_id: "status_DB_MASTER_ELEC_5"
+    offset: 24
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_5"
+  - device_id: "status_DB_MASTER_ELEC_6"
+    offset: 28
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_6"
+  - device_id: "status_DB_MASTER_ELEC_7"
+    offset: 32
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_7"
+  - device_id: "status_DB_MASTER_ELEC_8"
+    offset: 36
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_8"
+  - device_id: "status_DB_MASTER_ELEC_9"
+    offset: 40
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_9"
+  - device_id: "status_DB_MASTER_ELEC_10"
+    offset: 44
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_10"
+  - device_id: "status_DB_MASTER_ELEC_11"
+    offset: 48
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_11"
+  - device_id: "status_DB_MASTER_ELEC_12"
+    offset: 52
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_12"
+  - device_id: "status_DB_MASTER_ELEC_13"
+    offset: 56
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_13"
+  - device_id: "status_DB_MASTER_ELEC_14"
+    offset: 60
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_14"
+  - device_id: "status_DB_MASTER_ELEC_15"
+    offset: 64
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_15"
+  - device_id: "status_DB_MASTER_ELEC_16"
+    offset: 68
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_16"
+  - device_id: "status_DB_MASTER_ELEC_17"
+    offset: 72
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_17"
+  - device_id: "status_DB_MASTER_ELEC_18"
+    offset: 76
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_18"
+  - device_id: "status_DB_MASTER_ELEC_19"
+    offset: 80
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_19"
+  - device_id: "status_DB_MASTER_ELEC_20"
+    offset: 84
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_20"
+  - device_id: "status_DB_MASTER_ELEC_21"
+    offset: 88
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_21"
+  - device_id: "status_DB_MASTER_ELEC_22"
+    offset: 92
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_22"
+  - device_id: "status_DB_MASTER_ELEC_23"
+    offset: 96
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_23"
+  - device_id: "status_DB_MASTER_ELEC_24"
+    offset: 100
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_24"
+  - device_id: "status_DB_MASTER_ELEC_25"
+    offset: 104
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_25"
+  - device_id: "status_DB_MASTER_ELEC_26"
+    offset: 108
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_26"
+  - device_id: "status_DB_MASTER_ELEC_27"
+    offset: 112
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_27"
+  - device_id: "status_DB_MASTER_ELEC_28"
+    offset: 116
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_28"
+  - device_id: "status_DB_MASTER_ELEC_29"
+    offset: 120
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_29"
+  - device_id: "status_DB_MASTER_ELEC_30"
+    offset: 124
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_30"
+  - device_id: "status_DB_MASTER_ELEC_31"
+    offset: 128
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_31"
+  - device_id: "status_DB_MASTER_ELEC_32"
+    offset: 132
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_32"
+  - device_id: "status_DB_MASTER_ELEC_33"
+    offset: 136
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_33"
+  - device_id: "status_DB_MASTER_ELEC_34"
+    offset: 140
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_34"
+  - device_id: "status_DB_MASTER_ELEC_35"
+    offset: 144
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_35"
+  - device_id: "status_DB_MASTER_ELEC_36"
+    offset: 148
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_ELEC_36"
+
+  # --------------------------------------------------------
+  # DB_MASTER_THERMAL_0 ~ DB_MASTER_THERMAL_17 (温度状态) - offset 152-223
+  # --------------------------------------------------------
+  - device_id: "status_DB_MASTER_THERMAL_0"
+    offset: 152
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_0"
+  - device_id: "status_DB_MASTER_THERMAL_1"
+    offset: 156
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_1"
+  - device_id: "status_DB_MASTER_THERMAL_2"
+    offset: 160
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_2"
+  - device_id: "status_DB_MASTER_THERMAL_3"
+    offset: 164
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_3"
+  - device_id: "status_DB_MASTER_THERMAL_4"
+    offset: 168
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_4"
+  - device_id: "status_DB_MASTER_THERMAL_5"
+    offset: 172
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_5"
+  - device_id: "status_DB_MASTER_THERMAL_6"
+    offset: 176
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_6"
+  - device_id: "status_DB_MASTER_THERMAL_7"
+    offset: 180
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_7"
+  - device_id: "status_DB_MASTER_THERMAL_8"
+    offset: 184
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_8"
+  - device_id: "status_DB_MASTER_THERMAL_9"
+    offset: 188
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_9"
+  - device_id: "status_DB_MASTER_THERMAL_10"
+    offset: 192
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_10"
+  - device_id: "status_DB_MASTER_THERMAL_11"
+    offset: 196
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_11"
+  - device_id: "status_DB_MASTER_THERMAL_12"
+    offset: 200
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_12"
+  - device_id: "status_DB_MASTER_THERMAL_13"
+    offset: 204
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_13"
+  - device_id: "status_DB_MASTER_THERMAL_14"
+    offset: 208
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_14"
+  - device_id: "status_DB_MASTER_THERMAL_15"
+    offset: 212
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_15"
+  - device_id: "status_DB_MASTER_THERMAL_16"
+    offset: 216
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_16"
+  - device_id: "status_DB_MASTER_THERMAL_17"
+    offset: 220
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_THERMAL_17"
+
+  # --------------------------------------------------------
+  # DB_MASTER_FLOW_0 ~ DB_MASTER_FLOW_1 (流量状态) - offset 228-236
+  # --------------------------------------------------------
+  - device_id: "status_DB_MASTER_FLOW_0"
+    offset: 228
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_FLOW_0"
+  - device_id: "status_DB_MASTER_FLOW_1"
+    offset: 232
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_FLOW_1"
+
+  # --------------------------------------------------------
+  # DB_MASTER_WEIGH_0 ~ DB_MASTER_WEIGH_6 (称重状态) - offset 236-264
+  # --------------------------------------------------------
+  - device_id: "status_DB_MASTER_WEIGH_0"
+    offset: 236
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_0"
+  - device_id: "status_DB_MASTER_WEIGH_1"
+    offset: 240
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_1"
+  - device_id: "status_DB_MASTER_WEIGH_2"
+    offset: 244
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_2"
+  - device_id: "status_DB_MASTER_WEIGH_3"
+    offset: 248
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_3"
+  - device_id: "status_DB_MASTER_WEIGH_4"
+    offset: 252
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_4"
+  - device_id: "status_DB_MASTER_WEIGH_5"
+    offset: 256
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_5"
+  - device_id: "status_DB_MASTER_WEIGH_6"
+    offset: 260
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGH_6"
+
+  # --------------------------------------------------------
+  # DB_MASTER_WEIGHTED (累计称重状态) - offset 264-270
+  # --------------------------------------------------------
+  - device_id: "status_DB_MASTER_WEIGHTED"
+    offset: 264
+    module_type: "DeviceStatus"
+    description: "status_DB_MASTER_WEIGHTED"
+
+# ============================================================
+# 状态总大小计算
+# ============================================================
+# MB_COMM_LOAD: 4 bytes (0-4)
+# DB_MASTER_ELEC: 37 * 4 = 148 bytes (4-152)
+# DB_MASTER_THERMAL: 18 * 4 = 72 bytes (152-224)
+# (空隙: 4 bytes 224-228)
+# DB_MASTER_FLOW: 2 * 4 = 8 bytes (228-236)
+# DB_MASTER_WEIGH: 7 * 4 = 28 bytes (236-264)
+# DB_MASTER_WEIGHTED: 1 * 4 = 4 bytes (264-268)
+# 总计: 268 bytes
+# ============================================================
+total_status_size: 268

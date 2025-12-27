@@ -2,15 +2,13 @@
 # 文件说明: scr_fan.py - SCR设备和风机API路由
 # ============================================================
 # 接口列表:
-# 1. GET /api/scr/list                     - 获取SCR设备列表
-# 2. GET /api/scr/realtime/batch           - 批量获取所有SCR实时数据
-# 3. GET /api/scr/{device_id}              - 获取SCR实时数据
+# 1. GET /api/scr-fan/realtime/batch       - 批量获取所有SCR+风机实时数据（内存缓存）
+# 2. GET /api/scr/realtime/batch           - 批量获取所有SCR实时数据（内存缓存）
+# 3. GET /api/scr/{device_id}              - 获取SCR实时数据（内存缓存）
 # 4. GET /api/scr/{device_id}/history      - 获取SCR历史数据
-# 5. GET /api/fan/list                     - 获取风机列表
-# 6. GET /api/fan/realtime/batch           - 批量获取所有风机实时数据
-# 7. GET /api/fan/{device_id}              - 获取风机实时数据
-# 8. GET /api/fan/{device_id}/history      - 获取风机历史数据
-# 9. GET /api/scr-fan/realtime/batch       - 批量获取所有SCR+风机实时数据
+# 5. GET /api/fan/realtime/batch           - 批量获取所有风机实时数据（内存缓存）
+# 6. GET /api/fan/{device_id}              - 获取风机实时数据（内存缓存）
+# 7. GET /api/fan/{device_id}/history      - 获取风机历史数据
 # ============================================================
 
 from fastapi import APIRouter, Query, Path
@@ -19,23 +17,35 @@ from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
 from app.services.history_query_service import HistoryQueryService
+from app.services.polling_service import (
+    get_latest_data,
+    get_latest_device_data,
+    get_latest_timestamp,
+    is_polling_running
+)
 
 router = APIRouter(tags=["SCR设备和风机"])
 
-# 初始化查询服务
+# 初始化查询服务（用于历史数据）
 query_service = HistoryQueryService()
 
+# 静态设备列表
+SCR_DEVICES = ["scr_1", "scr_2"]
+FAN_DEVICES = ["fan_1", "fan_2"]
+
 
 # ============================================================
-# 统一批量查询 API
+# 统一批量查询 API（内存缓存）
 # ============================================================
 
 # ============================================================
-# GET /api/scr-fan/realtime/batch - 批量获取所有SCR+风机实时数据
+# GET /api/scr-fan/realtime/batch - 批量获取所有SCR+风机实时数据（内存缓存）
 # ============================================================
 @router.get("/api/scr-fan/realtime/batch")
 async def get_all_scr_fan_realtime():
-    """批量获取所有SCR设备和风机的实时数据 (2 SCR + 2 风机 = 4台)
+    """批量获取所有SCR设备和风机的实时数据（从内存缓存读取）
+    
+    **数据来源**: 内存缓存（由轮询服务实时更新）
     
     **返回结构**:
     ```json
@@ -43,6 +53,8 @@ async def get_all_scr_fan_realtime():
         "success": true,
         "data": {
             "total": 4,
+            "source": "cache",
+            "timestamp": "2025-12-25T10:00:00Z",
             "scr": {
                 "total": 2,
                 "devices": [...]
@@ -56,24 +68,25 @@ async def get_all_scr_fan_realtime():
     ```
     """
     try:
-        # 查询所有SCR设备
-        scr_list = query_service.query_device_list("scr")
+        # 从内存缓存获取 SCR 设备数据
         scr_data = []
-        for device in scr_list:
-            device_data = query_service.query_device_realtime(device["device_id"])
-            if device_data:
-                scr_data.append(device_data)
+        for device_id in SCR_DEVICES:
+            cached = get_latest_device_data(device_id)
+            if cached:
+                scr_data.append(cached)
         
-        # 查询所有风机设备
-        fan_list = query_service.query_device_list("fan")
+        # 从内存缓存获取风机设备数据
         fan_data = []
-        for device in fan_list:
-            device_data = query_service.query_device_realtime(device["device_id"])
-            if device_data:
-                fan_data.append(device_data)
+        for device_id in FAN_DEVICES:
+            cached = get_latest_device_data(device_id)
+            if cached:
+                fan_data.append(cached)
         
         return ApiResponse.ok({
             "total": len(scr_data) + len(fan_data),
+            "source": "cache",
+            "timestamp": get_latest_timestamp(),
+            "polling_running": is_polling_running(),
             "scr": {
                 "total": len(scr_data),
                 "devices": scr_data
@@ -88,67 +101,31 @@ async def get_all_scr_fan_realtime():
 
 
 # ============================================================
-# SCR 设备 API
+# SCR 设备 API（内存缓存）
 # ============================================================
 
 # ============================================================
-# 1. GET /api/scr/list - 获取SCR设备列表
-# ============================================================
-@router.get("/api/scr/list")
-async def get_scr_list():
-    """获取所有SCR设备列表
-    
-    **返回**: SCR设备列表 (2台)
-    """
-    try:
-        data = query_service.query_device_list("scr")
-        return ApiResponse.ok(data)
-    except Exception as e:
-        return ApiResponse.fail(f"查询失败: {str(e)}")
-
-
-# ============================================================
-# 新增: GET /api/scr/realtime/batch - 批量获取所有SCR实时数据
+# 1. GET /api/scr/realtime/batch - 批量获取所有SCR实时数据（内存缓存）
 # ============================================================
 @router.get("/api/scr/realtime/batch")
 async def get_all_scr_realtime():
-    """批量获取所有SCR设备的实时数据 (2台)
+    """批量获取所有SCR设备的实时数据（从内存缓存读取）
     
-    **返回结构**:
-    ```json
-    {
-        "success": true,
-        "data": {
-            "total": 2,
-            "devices": [
-                {
-                    "device_id": "scr_1",
-                    "device_type": "scr",
-                    "timestamp": "2025-12-11T10:00:00Z",
-                    "modules": {
-                        "elec": {...},
-                        "gas": {...}
-                    }
-                },
-                ...
-            ]
-        }
-    }
-    ```
+    **数据来源**: 内存缓存（由轮询服务实时更新）
     """
     try:
-        # 获取所有SCR设备列表
-        device_list = query_service.query_device_list("scr")
-        
-        # 并行查询所有设备的实时数据
+        # 从内存缓存获取数据
         devices_data = []
-        for device in device_list:
-            device_data = query_service.query_device_realtime(device["device_id"])
-            if device_data:
-                devices_data.append(device_data)
+        for device_id in SCR_DEVICES:
+            cached = get_latest_device_data(device_id)
+            if cached:
+                devices_data.append(cached)
         
         return ApiResponse.ok({
             "total": len(devices_data),
+            "source": "cache",
+            "timestamp": get_latest_timestamp(),
+            "polling_running": is_polling_running(),
             "devices": devices_data
         })
     except Exception as e:
@@ -156,29 +133,35 @@ async def get_all_scr_realtime():
 
 
 # ============================================================
-# 2. GET /api/scr/{device_id} - 获取SCR实时数据
+# 2. GET /api/scr/{device_id} - 获取SCR实时数据（内存缓存）
 # ============================================================
 @router.get("/api/scr/{device_id}")
 async def get_scr_realtime(
     device_id: str = Path(..., description="SCR设备ID", example="scr_1")
 ):
-    """获取指定SCR设备的实时数据
+    """获取指定SCR设备的实时数据（从内存缓存读取）
     
     **返回字段**:
     - 燃气表: `flow_rate` (m³/h), `total_flow` (m³)
     - 电表: `Pt`, `ImpEp`, `Ua_0~2`, `I_0~2`
-    
-    **示例**:
-    ```
-    GET /api/scr/scr_1
-    GET /api/scr/scr_2
-    ```
     """
     try:
+        # 优先从内存缓存读取
+        cached = get_latest_device_data(device_id)
+        if cached:
+            return ApiResponse.ok({
+                "source": "cache",
+                **cached
+            })
+        
+        # 缓存无数据，查询 InfluxDB
         data = query_service.query_device_realtime(device_id)
         if not data:
             return ApiResponse.fail(f"设备 {device_id} 不存在或无数据")
-        return ApiResponse.ok(data)
+        return ApiResponse.ok({
+            "source": "influxdb",
+            **data
+        })
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
@@ -245,66 +228,31 @@ async def get_scr_history(
 
 
 # ============================================================
-# 风机 API
+# 风机 API（内存缓存）
 # ============================================================
 
 # ============================================================
-# 4. GET /api/fan/list - 获取风机列表
-# ============================================================
-@router.get("/api/fan/list")
-async def get_fan_list():
-    """获取所有风机设备列表
-    
-    **返回**: 风机设备列表 (2台)
-    """
-    try:
-        data = query_service.query_device_list("fan")
-        return ApiResponse.ok(data)
-    except Exception as e:
-        return ApiResponse.fail(f"查询失败: {str(e)}")
-
-
-# ============================================================
-# 新增: GET /api/fan/realtime/batch - 批量获取所有风机实时数据
+# 4. GET /api/fan/realtime/batch - 批量获取所有风机实时数据（内存缓存）
 # ============================================================
 @router.get("/api/fan/realtime/batch")
 async def get_all_fans_realtime():
-    """批量获取所有风机设备的实时数据 (2台)
+    """批量获取所有风机设备的实时数据（从内存缓存读取）
     
-    **返回结构**:
-    ```json
-    {
-        "success": true,
-        "data": {
-            "total": 2,
-            "devices": [
-                {
-                    "device_id": "fan_1",
-                    "device_type": "fan",
-                    "timestamp": "2025-12-11T10:00:00Z",
-                    "modules": {
-                        "elec": {...}
-                    }
-                },
-                ...
-            ]
-        }
-    }
-    ```
+    **数据来源**: 内存缓存（由轮询服务实时更新）
     """
     try:
-        # 获取所有风机设备列表
-        device_list = query_service.query_device_list("fan")
-        
-        # 并行查询所有设备的实时数据
+        # 从内存缓存获取数据
         devices_data = []
-        for device in device_list:
-            device_data = query_service.query_device_realtime(device["device_id"])
-            if device_data:
-                devices_data.append(device_data)
+        for device_id in FAN_DEVICES:
+            cached = get_latest_device_data(device_id)
+            if cached:
+                devices_data.append(cached)
         
         return ApiResponse.ok({
             "total": len(devices_data),
+            "source": "cache",
+            "timestamp": get_latest_timestamp(),
+            "polling_running": is_polling_running(),
             "devices": devices_data
         })
     except Exception as e:
@@ -312,28 +260,36 @@ async def get_all_fans_realtime():
 
 
 # ============================================================
-# 5. GET /api/fan/{device_id} - 获取风机实时数据
+# 5. GET /api/fan/{device_id} - 获取风机实时数据（内存缓存）
 # ============================================================
 @router.get("/api/fan/{device_id}")
 async def get_fan_realtime(
     device_id: str = Path(..., description="风机设备ID", example="fan_1")
 ):
-    """获取指定风机的实时数据
+    """获取指定风机的实时数据（从内存缓存读取）
+    
+    **数据来源**: 优先从内存缓存读取，未命中时查询 InfluxDB
     
     **返回字段**:
     - 电表: `Pt`, `ImpEp`, `Ua_0~2`, `I_0~2`
-    
-    **示例**:
-    ```
-    GET /api/fan/fan_1
-    GET /api/fan/fan_2
-    ```
     """
     try:
+        # 优先从内存缓存获取
+        cached = get_latest_device_data(device_id)
+        if cached:
+            return ApiResponse.ok({
+                **cached,
+                "source": "cache"
+            })
+        
+        # 缓存未命中，查询 InfluxDB
         data = query_service.query_device_realtime(device_id)
         if not data:
             return ApiResponse.fail(f"设备 {device_id} 不存在或无数据")
-        return ApiResponse.ok(data)
+        return ApiResponse.ok({
+            **data,
+            "source": "influxdb"
+        })
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
 

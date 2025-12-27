@@ -1,0 +1,32 @@
+# 忽略部署相关文件
+deploy/
+*.tar
+
+# 忽略 Windows 离线包（镜像里已有 Linux 包）
+python_packages/
+
+# 忽略缓存和临时文件
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 忽略版本控制
+.git/
+.gitignore
+.gitattributes
+
+# 忽略 IDE 配置
+.cursor/
+.vscode/
+*.code-workspace
+
+# 忽略备份和文档
+backups/
+docs/
+*.md
+!README.md
+
+# 忽略测试（生产环境不需要）
+tests/
+scripts/

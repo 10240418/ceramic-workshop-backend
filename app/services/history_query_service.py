@@ -19,6 +19,7 @@ from functools import lru_cache
 
 from config import get_settings
 from app.core.influxdb import get_influx_client
+from app.core.timezone_utils import to_beijing, beijing_isoformat
 
 settings = get_settings()
 
@@ -30,6 +31,38 @@ class HistoryQueryService:
         self.client = get_influx_client()
         self.query_api = self.client.query_api()
         self.bucket = settings.influx_bucket
+    
+    # ------------------------------------------------------------
+    # 0. get_latest_db_timestamp() - 获取数据库中最新数据的时间戳
+    # ------------------------------------------------------------
+    def get_latest_db_timestamp(self) -> Optional[datetime]:
+        """获取数据库中最新数据的时间戳
+        
+        Returns:
+            最新数据的时间戳（UTC时间），如果没有数据则返回None
+        """
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: -30d)
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> last()
+            |> keep(columns: ["_time"])
+        '''
+        
+        try:
+            result = self.query_api.query(query)
+            latest_time = None
+            
+            for table in result:
+                for record in table.records:
+                    timestamp = record.get_time()
+                    if latest_time is None or timestamp > latest_time:
+                        latest_time = timestamp
+            
+            return latest_time
+        except Exception as e:
+            print(f"⚠️  获取最新时间戳失败: {str(e)}")
+            return None
     
     # ------------------------------------------------------------
     # 1. query_device_list() - 查询设备列表
@@ -47,6 +80,7 @@ class HistoryQueryService:
             ]
         """
         # 使用更简单的查询方式，避免 distinct 类型冲突
+        # 修复: 保留 _value 列，避免 "no column _value exists" 错误
         filter_str = 'r["_measurement"] == "sensor_data"'
         if device_type:
             filter_str += f' and r["device_type"] == "{device_type}"'
@@ -55,7 +89,7 @@ class HistoryQueryService:
         from(bucket: "{self.bucket}")
             |> range(start: -24h)
             |> filter(fn: (r) => {filter_str})
-            |> keep(columns: ["device_id", "device_type", "db_number"])
+            |> keep(columns: ["device_id", "device_type", "db_number", "_value", "_time"])
             |> group(columns: ["device_id", "device_type", "db_number"])
             |> first()
         '''
@@ -173,7 +207,7 @@ class HistoryQueryService:
         
         return {
             'device_id': device_id,
-            'timestamp': latest_time.isoformat() if latest_time else None,
+            'timestamp': to_beijing(latest_time).isoformat() if latest_time else None,
             'modules': modules_data
         }
     
@@ -248,7 +282,7 @@ class HistoryQueryService:
         for table in result:
             for record in table.records:
                 row = {
-                    'time': record.get_time().isoformat(),
+                    'time': to_beijing(record.get_time()).isoformat(),
                     'module_tag': record.values.get('module_tag', ''),
                     'module_type': record.values.get('module_type', '')
                 }
@@ -390,7 +424,7 @@ class HistoryQueryService:
         data = []
         for table in result:
             for record in table.records:
-                row = {'time': record.get_time().isoformat()}
+                row = {'time': to_beijing(record.get_time()).isoformat()}
                 
                 # 添加每个设备的值
                 for key, value in record.values.items():

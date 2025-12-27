@@ -21,8 +21,11 @@ class Settings(BaseSettings):
     # 轮询开关 (用于docker部署时关闭轮询，由mock服务提供数据)
     enable_polling: bool = True
     
+    # Mock模式 (使用模拟数据而非真实PLC)
+    mock_mode: bool = False
+    
     # 详细轮询日志 (True: 显示每个设备的详细数据, False: 仅显示写入数量)
-    # Release模式下建议设为False，只输出rror级别和API请求日志
+    # Release模式下建议设为False，只输出error级别和API请求日志
     verbose_polling_log: bool = False
     
     # PLC 配置
@@ -31,6 +34,12 @@ class Settings(BaseSettings):
     plc_slot: int = 1
     plc_timeout: int = 5000  # ms
     plc_poll_interval: int = 6  # seconds (轮询间隔)
+    
+    # 批量写入配置
+    batch_write_size: int = 30  # 多少次轮询后批量写入 InfluxDB
+    
+    # 本地缓存配置
+    local_cache_path: str = "data/cache.db"  # SQLite 缓存文件路径
     
     # InfluxDB 配置 (唯一数据库)
     influx_url: str = "http://localhost:8086"

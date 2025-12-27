@@ -23,7 +23,7 @@ services:
         limits:
           memory: 8G
 
-  # Python Backend (启用PLC轮询)
+  # Python Backend (正常模式 - 连接真实PLC)
   backend:
     build: .
     container_name: ceramic-backend
@@ -42,8 +42,38 @@ services:
       - INFLUX_ORG=ceramic-workshop
       - INFLUX_BUCKET=sensor_data
       - ENABLE_POLLING=true
+      - MOCK_MODE=false
     networks:
       - ceramic-network
+    profiles:
+      - default
+      - production
+
+  # Python Backend (Mock模式 - 使用模拟数据)
+  backend-mock:
+    build: .
+    container_name: ceramic-backend
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    depends_on:
+      - influxdb
+    volumes:
+      - .:/app
+      - ./configs:/app/configs
+      - ./tests:/app/tests
+    environment:
+      - PYTHONUNBUFFERED=1
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=ceramic-workshop-token
+      - INFLUX_ORG=ceramic-workshop
+      - INFLUX_BUCKET=sensor_data
+      - ENABLE_POLLING=true
+      - MOCK_MODE=true
+    networks:
+      - ceramic-network
+    profiles:
+      - mock
 
 networks:
   ceramic-network:

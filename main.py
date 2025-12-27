@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, config, hopper, roller, scr_fan, devices
+from app.routers import health, config, hopper, roller, scr_fan, devices, status, sensor_health
 from app.services.polling_service import start_polling, stop_polling
 from config import get_settings
 
@@ -87,6 +87,8 @@ def create_app() -> FastAPI:
     app.include_router(roller.router)
     app.include_router(scr_fan.router)
     app.include_router(devices.router)
+    app.include_router(status.router)
+    app.include_router(sensor_health.router)
     app.include_router(config.router, prefix="/api/config", tags=["系统配置"])
     
     return app

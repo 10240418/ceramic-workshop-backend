@@ -7,6 +7,81 @@
 
 modules:
   # ============================================================
+  # 0. 设备状态模块 (DeviceStatus)
+  # ============================================================
+  # 每个设备状态占用 4 字节
+  # 结构: DONE(bit0) + BUSY(bit1) + ERROR(bit2) + STATUS(Word)
+  # 用于监控 PLC 通信状态
+  - name: DeviceStatus
+    description: 设备通信状态模块
+    total_size: 4
+    fields:
+      - name: DONE
+        display_name: 通信完成
+        data_type: Bool
+        offset: 0
+        bit: 0
+        size: 1
+        unit: ""
+        scale: 1.0
+      - name: BUSY
+        display_name: 通信忙
+        data_type: Bool
+        offset: 0
+        bit: 1
+        size: 1
+        unit: ""
+        scale: 1.0
+      - name: ERROR
+        display_name: 通信错误
+        data_type: Bool
+        offset: 0
+        bit: 2
+        size: 1
+        unit: ""
+        scale: 1.0
+      - name: STATUS
+        display_name: 状态码
+        data_type: Word
+        offset: 2
+        size: 2
+        unit: ""
+        scale: 1.0
+
+  # ============================================================
+  # 0.1 主通信状态模块 (CommLoadStatus) - MB_COMM_LOAD 专用
+  # ============================================================
+  # MB_COMM_LOAD 只有 DONE, ERROR, STATUS，没有 BUSY
+  # 占用 4 字节
+  - name: CommLoadStatus
+    description: 主通信加载状态模块
+    total_size: 4
+    fields:
+      - name: DONE
+        display_name: 通信完成
+        data_type: Bool
+        offset: 0
+        bit: 0
+        size: 1
+        unit: ""
+        scale: 1.0
+      - name: ERROR
+        display_name: 通信错误
+        data_type: Bool
+        offset: 0
+        bit: 1
+        size: 1
+        unit: ""
+        scale: 1.0
+      - name: STATUS
+        display_name: 状态码
+        data_type: Word
+        offset: 2
+        size: 2
+        unit: ""
+        scale: 1.0
+
+  # ============================================================
   # 1. 称重传感器模块 (WeighSensor)
   # ============================================================
   # Offset: 0-13 (14 bytes)

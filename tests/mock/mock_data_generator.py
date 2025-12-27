@@ -21,28 +21,33 @@ class MockDataGenerator:
     """
     
     def __init__(self):
-        # 基础值 (用于模拟真实波动)
+        # 基础值 (用于模拟真实工业场景)
         self._base_values = {
-            # 料仓基础值
-            'hopper_weight': [1500, 1800, 2200, 1600, 0, 0, 2500, 2800, 3000],  # 9个料仓
-            'hopper_temp': [75, 80, 72, 78, 65, 68, 82, 85, 79],  # 温度
-            'hopper_power': [35, 42, 38, 40, 25, 28, 45, 50, 48],  # 功率
+            # 料仓基础值 - 模拟真实陶瓷原料料仓
+            # 短料仓: 容量2000kg, 无料仓: 不储料, 长料仓: 容量3500kg
+            'hopper_weight': [1650, 1420, 1890, 1280, 0, 0, 2850, 3120, 2680],  # kg
+            'hopper_temp': [68, 72, 75, 70, 55, 58, 82, 78, 85],  # °C 干燥温度
+            'hopper_power': [18.5, 22.0, 19.8, 21.5, 8.5, 9.2, 28.5, 32.0, 26.8],  # kW
             
-            # 辊道窑基础值
-            'roller_temp': [820, 850, 880, 900, 870, 840],  # 6个温区温度
-            'roller_power': [38, 42, 45, 48, 44, 40],  # 6个温区功率
-            'roller_energy': [1250, 1380, 1520, 1680, 1450, 1320],  # 能耗
+            # 辊道窑基础值 - 陶瓷烧成温度曲线 (预热→升温→保温→冷却)
+            'roller_temp': [450, 680, 920, 1080, 1050, 780],  # °C 典型陶瓷烧成曲线
+            'roller_power': [45, 62, 85, 95, 88, 55],  # kW 各温区功率
+            'roller_energy': [2850, 3680, 5120, 5980, 5450, 3250],  # kWh 累计能耗
             
-            # SCR基础值
-            'scr_flow': [120, 135],  # 2个SCR流量
-            'scr_power': [28, 32],  # 2个SCR功率
+            # SCR脱硝设备 - 氨水喷射系统
+            'scr_flow': [85.5, 92.3],  # L/min 氨水流量
+            'scr_power': [15.5, 18.2],  # kW 泵功率
             
-            # 风机基础值
-            'fan_power': [55, 62],  # 2个风机功率
+            # 引风机 - 大功率工业风机
+            'fan_power': [75.0, 82.5],  # kW 风机功率
         }
         
         # 时间累计值 (用于生成连续变化的数据)
         self._tick = 0
+        
+        # 料仓消耗模式 (模拟下料过程)
+        self._hopper_consuming = [False] * 9
+        self._hopper_consume_rate = [0.0] * 9  # kg/s
         
         # 能耗累计值
         self._energy_accumulator = {
@@ -55,9 +60,22 @@ class MockDataGenerator:
     def tick(self):
         """时间前进一步 (每次轮询调用)"""
         self._tick += 1
+        
+        # 模拟料仓下料过程 (随机触发)
+        for i in range(9):
+            if i in [4, 5]:  # 无料仓跳过
+                continue
+            # 10% 概率切换下料状态
+            if random.random() < 0.1:
+                self._hopper_consuming[i] = not self._hopper_consuming[i]
+                if self._hopper_consuming[i]:
+                    # 开始下料: 0.5-2.5 kg/s
+                    self._hopper_consume_rate[i] = random.uniform(0.5, 2.5)
+                else:
+                    self._hopper_consume_rate[i] = 0.0
     
-    def _add_noise(self, base: float, noise_range: float = 0.05) -> float:
-        """添加随机波动"""
+    def _add_noise(self, base: float, noise_range: float = 0.03) -> float:
+        """添加随机波动 (默认3%波动)"""
         noise = random.uniform(-noise_range, noise_range)
         return base * (1 + noise)
     
@@ -301,10 +319,121 @@ class MockDataGenerator:
         self.tick()  # 时间前进
         
         return {
+            1: self.generate_db1_status_data(),  # 状态位数据
             8: self.generate_db8_data(),
             9: self.generate_db9_data(),
             10: self.generate_db10_data(),
         }
+    
+    def generate_db1_status_data(self) -> bytes:
+        """生成DB1状态位数据块 (270字节)
+        
+        根据 config_status.yaml 结构:
+        - MB_COMM_LOAD: 4字节 (offset 0)
+        - DB_MASTER_ELEC_0~36: 37*4=148字节 (offset 4-152)
+        - DB_MASTER_THERMAL_0~17: 18*4=72字节 (offset 152-224)
+        - 空隙: 4字节 (offset 224-228)
+        - DB_MASTER_FLOW_0~1: 2*4=8字节 (offset 228-236)
+        - DB_MASTER_WEIGH_0~6: 7*4=28字节 (offset 236-264)
+        - DB_MASTER_WEIGHTED: 4字节 (offset 264-268)
+        - 填充: 2字节 (offset 268-270)
+        
+        状态结构 (每设备4字节):
+        - byte0: DONE(bit0), BUSY(bit1), ERROR(bit2)
+        - byte1: 保留
+        - byte2-3: STATUS (Word, 状态码)
+        """
+        data = bytearray(270)
+        
+        # MB_COMM_LOAD (offset 0) - CommLoadStatus: DONE(bit0), ERROR(bit1)
+        # 模拟正常状态: DONE=1, ERROR=0, STATUS=0
+        data[0] = 0x01  # DONE=1
+        data[1] = 0x00
+        data[2] = 0x00  # STATUS high byte
+        data[3] = 0x00  # STATUS low byte
+        
+        # DB_MASTER_ELEC_0~36 (37个电表状态, offset 4-152)
+        # PLC常见错误码说明:
+        # 0x8200 (33280): 485通信断开/超时
+        # 0x8201 (33281): 485校验错误
+        # 0x8000 (32768): 通用通信故障
+        # 0x0001-0x000F: 传感器故障码
+        plc_error_codes = [
+            0x8200,  # 485通信断开 (最常见)
+            0x8201,  # 485校验错误
+            0x8000,  # 通用通信故障
+            0x0001,  # 传感器故障1
+            0x0002,  # 传感器故障2
+            0x0003,  # 传感器故障3
+            0x000A,  # 传感器故障10
+        ]
+        
+        for i in range(37):
+            offset = 4 + i * 4
+            # 模拟: 大部分正常, 偶尔有错误
+            if random.random() < 0.95:  # 95%正常
+                data[offset] = 0x01     # DONE=1, BUSY=0, ERROR=0
+                data[offset + 1] = 0x00
+                data[offset + 2] = 0x00  # STATUS=0
+                data[offset + 3] = 0x00
+            else:
+                # 模拟错误状态 - 使用真实PLC错误码
+                data[offset] = 0x04     # DONE=0, BUSY=0, ERROR=1
+                data[offset + 1] = 0x00
+                error_code = random.choice(plc_error_codes)
+                data[offset + 2] = (error_code >> 8) & 0xFF  # 高字节
+                data[offset + 3] = error_code & 0xFF         # 低字节
+        
+        # DB_MASTER_THERMAL_0~17 (18个温度状态, offset 152-224)
+        temp_error_codes = [0x8200, 0x0001, 0x0002, 0x0003]  # 温度传感器典型错误
+        for i in range(18):
+            offset = 152 + i * 4
+            if random.random() < 0.95:
+                data[offset] = 0x01
+                data[offset + 1] = 0x00
+                data[offset + 2] = 0x00
+                data[offset + 3] = 0x00
+            else:
+                data[offset] = 0x04
+                data[offset + 1] = 0x00
+                error_code = random.choice(temp_error_codes)
+                data[offset + 2] = (error_code >> 8) & 0xFF
+                data[offset + 3] = error_code & 0xFF
+        
+        # 空隙 (offset 224-228)
+        data[224:228] = b'\x00\x00\x00\x00'
+        
+        # DB_MASTER_FLOW_0~1 (2个流量状态, offset 228-236)
+        for i in range(2):
+            offset = 228 + i * 4
+            data[offset] = 0x01  # 正常
+            data[offset + 1] = 0x00
+            data[offset + 2] = 0x00
+            data[offset + 3] = 0x00
+        
+        # DB_MASTER_WEIGH_0~6 (7个称重状态, offset 236-264)
+        weight_error_codes = [0x8200, 0x0002]  # 称重传感器典型错误
+        for i in range(7):
+            offset = 236 + i * 4
+            if random.random() < 0.95:
+                data[offset] = 0x01
+                data[offset + 1] = 0x00
+                data[offset + 2] = 0x00
+                data[offset + 3] = 0x00
+            else:
+                data[offset] = 0x04
+                data[offset + 1] = 0x00
+                error_code = random.choice(weight_error_codes)
+                data[offset + 2] = (error_code >> 8) & 0xFF
+                data[offset + 3] = error_code & 0xFF
+        
+        # DB_MASTER_WEIGHTED (offset 264-268)
+        data[264] = 0x01
+        data[265] = 0x00
+        data[266] = 0x00
+        data[267] = 0x00
+        
+        return bytes(data)
 
 
 # 测试代码
