@@ -18,6 +18,17 @@ services:
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=ceramic-workshop-token
     networks:
       - ceramic-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
     deploy:
       resources:
         limits:
@@ -31,7 +42,8 @@ services:
     ports:
       - '8080:8080'
     depends_on:
-      - influxdb
+      influxdb:
+        condition: service_healthy
     volumes:
       - .:/app
       - ./configs:/app/configs
@@ -45,6 +57,17 @@ services:
       - MOCK_MODE=false
     networks:
       - ceramic-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     profiles:
       - default
       - production
@@ -57,7 +80,8 @@ services:
     ports:
       - '8080:8080'
     depends_on:
-      - influxdb
+      influxdb:
+        condition: service_healthy
     volumes:
       - .:/app
       - ./configs:/app/configs
@@ -72,6 +96,17 @@ services:
       - MOCK_MODE=true
     networks:
       - ceramic-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     profiles:
       - mock
 

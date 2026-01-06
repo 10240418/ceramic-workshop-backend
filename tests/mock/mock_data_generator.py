@@ -319,11 +319,140 @@ class MockDataGenerator:
         self.tick()  # 时间前进
         
         return {
-            1: self.generate_db1_status_data(),  # 状态位数据
+            3: self.generate_db3_status_data(),   # DB3: 回转窑状态位 (148字节)
+            7: self.generate_db7_status_data(),   # DB7: 辊道窑状态位 (72字节)
             8: self.generate_db8_data(),
             9: self.generate_db9_data(),
             10: self.generate_db10_data(),
+            11: self.generate_db11_status_data(), # DB11: SCR/风机状态位 (40字节)
         }
+    
+    def _generate_module_status(self, error_rate: float = 0.05, 
+                                 error_codes: list = None) -> bytes:
+        """生成单个模块状态 (4字节)
+        
+        结构: Error(Bool, offset 0) + Status(Word, offset 2)
+        - byte0: Error (bit 0)
+        - byte1: 保留
+        - byte2-3: Status (Word, 大端序)
+        
+        Args:
+            error_rate: 错误率 (0.0-1.0)
+            error_codes: 可能的错误码列表
+        """
+        if error_codes is None:
+            error_codes = [0x8200, 0x8201, 0x8000, 0x0001, 0x0002]
+        
+        data = bytearray(4)
+        
+        if random.random() < (1 - error_rate):
+            # 正常状态: Error=0, Status=0
+            data[0] = 0x00  # Error=0
+            data[1] = 0x00
+            data[2] = 0x00  # Status high byte
+            data[3] = 0x00  # Status low byte
+        else:
+            # 错误状态: Error=1, Status=错误码
+            data[0] = 0x01  # Error=1
+            data[1] = 0x00
+            error_code = random.choice(error_codes)
+            data[2] = (error_code >> 8) & 0xFF  # Status high byte
+            data[3] = error_code & 0xFF         # Status low byte
+        
+        return bytes(data)
+    
+    def generate_db3_status_data(self) -> bytes:
+        """生成DB3状态位数据块 - 回转窑(料仓)状态 (148字节)
+        
+        结构说明:
+        - Kiln_Have_1~4 (短料仓有称重): 4个×16字节 = 64字节 (offset 0-63)
+          每个: WeighSensor(4) + Temperature(4) + ElectricityMeter(4) + ElectricityMeter_I(4)
+        - Kiln_NoHave_1~2 (短料仓无称重): 2个×12字节 = 24字节 (offset 64-87)
+          每个: Temperature(4) + ElectricityMeter(4) + ElectricityMeter_I(4)
+        - LongKiln_Have_1~3 (长料仓有称重): 3个×20字节 = 60字节 (offset 88-147)
+          每个: WeighSensor(4) + Temperature_1(4) + Temperature_2(4) + ElectricityMeter(4) + ElectricityMeter_I(4)
+        """
+        data = bytearray(148)
+        offset = 0
+        
+        # Kiln_Have_1~4 (4个×16字节 = 64字节)
+        for i in range(4):
+            # WeighSensor + Temperature + ElectricityMeter + ElectricityMeter_I
+            for j in range(4):
+                data[offset:offset+4] = self._generate_module_status()
+                offset += 4
+        
+        # Kiln_NoHave_1~2 (2个×12字节 = 24字节)
+        for i in range(2):
+            # Temperature + ElectricityMeter + ElectricityMeter_I
+            for j in range(3):
+                data[offset:offset+4] = self._generate_module_status()
+                offset += 4
+        
+        # LongKiln_Have_1~3 (3个×20字节 = 60字节)
+        for i in range(3):
+            # WeighSensor + Temperature_1 + Temperature_2 + ElectricityMeter + ElectricityMeter_I
+            for j in range(5):
+                data[offset:offset+4] = self._generate_module_status()
+                offset += 4
+        
+        return bytes(data)
+    
+    def generate_db7_status_data(self) -> bytes:
+        """生成DB7状态位数据块 - 辊道窑状态 (72字节)
+        
+        结构说明:
+        - Temperature_1~6: 6个×4字节 = 24字节 (offset 0-23)
+        - ElectricityMeter_1~6: 6个×4字节 = 24字节 (offset 24-47)
+        - ElectricityMeter_I_1~6: 6个×4字节 = 24字节 (offset 48-71)
+        """
+        data = bytearray(72)
+        offset = 0
+        
+        # Temperature_1~6 (6个×4字节 = 24字节)
+        for i in range(6):
+            data[offset:offset+4] = self._generate_module_status()
+            offset += 4
+        
+        # ElectricityMeter_1~6 (6个×4字节 = 24字节)
+        for i in range(6):
+            data[offset:offset+4] = self._generate_module_status()
+            offset += 4
+        
+        # ElectricityMeter_I_1~6 (6个×4字节 = 24字节)
+        for i in range(6):
+            data[offset:offset+4] = self._generate_module_status()
+            offset += 4
+        
+        return bytes(data)
+    
+    def generate_db11_status_data(self) -> bytes:
+        """生成DB11状态位数据块 - SCR/风机状态 (40字节)
+        
+        结构说明:
+        - SCR_1~2: 2个×12字节 = 24字节 (offset 0-23)
+          每个: GasMeter(4) + ElectricityMeter(4) + ElectricityMeter_I(4)
+        - Fan_1~2: 2个×8字节 = 16字节 (offset 24-39)
+          每个: ElectricityMeter(4) + ElectricityMeter_I(4)
+        """
+        data = bytearray(40)
+        offset = 0
+        
+        # SCR_1~2 (2个×12字节 = 24字节)
+        for i in range(2):
+            # GasMeter + ElectricityMeter + ElectricityMeter_I
+            for j in range(3):
+                data[offset:offset+4] = self._generate_module_status()
+                offset += 4
+        
+        # Fan_1~2 (2个×8字节 = 16字节)
+        for i in range(2):
+            # ElectricityMeter + ElectricityMeter_I
+            for j in range(2):
+                data[offset:offset+4] = self._generate_module_status()
+                offset += 4
+        
+        return bytes(data)
     
     def generate_db1_status_data(self) -> bytes:
         """生成DB1状态位数据块 (270字节)

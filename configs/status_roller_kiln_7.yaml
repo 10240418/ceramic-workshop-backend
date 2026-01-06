@@ -1,0 +1,226 @@
+# ============================================================
+# DB7 状态位配置文件 - 辊道窑设备状态监控
+# ============================================================
+# 根据 PLC 截图中的 RollerKilnState [DB7] 结构
+# 每个模块状态: Error(Bool) + Status(Word) = 4字节
+# ============================================================
+
+db_config:
+  db_number: 7
+  db_name: "RollerKilnState"
+  total_size: 72
+  description: "辊道窑设备状态数据块"
+
+# ============================================================
+# 模块状态结构说明
+# ============================================================
+# ModuleStatus: Error(Bool, offset 0) + Status(Word, offset 2) = 4 bytes
+#
+# 辊道窑配置:
+#   - 6个温度传感器状态 (Temperature_1~6): 6 × 4 = 24字节
+#   - 6组电表状态 (每组包含 ElectricityMeter + ElectricityMeter_ImpE): 6 × 8 = 48字节
+# ============================================================
+
+# ============================================================
+# 温度传感器状态 (Temperature_1~6) - 每个4字节
+# 偏移: 0, 4, 8, 12, 16, 20
+# ============================================================
+temperature_status:
+  - device_id: "status_roller_temp_1"
+    device_name: "辊道窑温度传感器1状态"
+    device_type: "temperature_status"
+    offset: 0
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "temperature_1"
+    description: "1号温区温度传感器状态"
+
+  - device_id: "status_roller_temp_2"
+    device_name: "辊道窑温度传感器2状态"
+    device_type: "temperature_status"
+    offset: 4
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "temperature_2"
+    description: "2号温区温度传感器状态"
+
+  - device_id: "status_roller_temp_3"
+    device_name: "辊道窑温度传感器3状态"
+    device_type: "temperature_status"
+    offset: 8
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "temperature_3"
+    description: "3号温区温度传感器状态"
+
+  - device_id: "status_roller_temp_4"
+    device_name: "辊道窑温度传感器4状态"
+    device_type: "temperature_status"
+    offset: 12
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "temperature_4"
+    description: "4号温区温度传感器状态"
+
+  - device_id: "status_roller_temp_5"
+    device_name: "辊道窑温度传感器5状态"
+    device_type: "temperature_status"
+    offset: 16
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "temperature_5"
+    description: "5号温区温度传感器状态"
+
+  - device_id: "status_roller_temp_6"
+    device_name: "辊道窑温度传感器6状态"
+    device_type: "temperature_status"
+    offset: 20
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "temperature_6"
+    description: "6号温区温度传感器状态"
+
+# ============================================================
+# 电表状态 (ElectricityMeter_1~6 + ElectricityMeter_ImpE_1~6)
+# 每个温区有2个电表状态: 主电表 + 电能电表
+# 偏移: 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68
+# ============================================================
+electricity_meter_status:
+  # ---- 1号温区电表状态 ----
+  - device_id: "status_roller_meter_1"
+    device_name: "辊道窑1号电表状态"
+    device_type: "electricity_meter_status"
+    offset: 24
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_1"
+    description: "1号温区电表状态"
+
+  - device_id: "status_roller_meter_impe_1"
+    device_name: "辊道窑1号电能电表状态"
+    device_type: "electricity_meter_status"
+    offset: 28
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_impe_1"
+    description: "1号温区电能电表状态"
+
+  # ---- 2号温区电表状态 ----
+  - device_id: "status_roller_meter_2"
+    device_name: "辊道窑2号电表状态"
+    device_type: "electricity_meter_status"
+    offset: 32
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_2"
+    description: "2号温区电表状态"
+
+  - device_id: "status_roller_meter_impe_2"
+    device_name: "辊道窑2号电能电表状态"
+    device_type: "electricity_meter_status"
+    offset: 36
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_impe_2"
+    description: "2号温区电能电表状态"
+
+  # ---- 3号温区电表状态 ----
+  - device_id: "status_roller_meter_3"
+    device_name: "辊道窑3号电表状态"
+    device_type: "electricity_meter_status"
+    offset: 40
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_3"
+    description: "3号温区电表状态"
+
+  - device_id: "status_roller_meter_impe_3"
+    device_name: "辊道窑3号电能电表状态"
+    device_type: "electricity_meter_status"
+    offset: 44
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_impe_3"
+    description: "3号温区电能电表状态"
+
+  # ---- 4号温区电表状态 ----
+  - device_id: "status_roller_meter_4"
+    device_name: "辊道窑4号电表状态"
+    device_type: "electricity_meter_status"
+    offset: 48
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_4"
+    description: "4号温区电表状态"
+
+  - device_id: "status_roller_meter_impe_4"
+    device_name: "辊道窑4号电能电表状态"
+    device_type: "electricity_meter_status"
+    offset: 52
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_impe_4"
+    description: "4号温区电能电表状态"
+
+  # ---- 5号温区电表状态 ----
+  - device_id: "status_roller_meter_5"
+    device_name: "辊道窑5号电表状态"
+    device_type: "electricity_meter_status"
+    offset: 56
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_5"
+    description: "5号温区电表状态"
+
+  - device_id: "status_roller_meter_impe_5"
+    device_name: "辊道窑5号电能电表状态"
+    device_type: "electricity_meter_status"
+    offset: 60
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_impe_5"
+    description: "5号温区电能电表状态"
+
+  # ---- 6号温区电表状态 ----
+  - device_id: "status_roller_meter_6"
+    device_name: "辊道窑6号电表状态"
+    device_type: "electricity_meter_status"
+    offset: 64
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_6"
+    description: "6号温区电表状态"
+
+  - device_id: "status_roller_meter_impe_6"
+    device_name: "辊道窑6号电能电表状态"
+    device_type: "electricity_meter_status"
+    offset: 68
+    size: 4
+    module_type: "ModuleStatus"
+    tag: "electricity_meter_impe_6"
+    description: "6号温区电能电表状态"
+
+# ============================================================
+# DB块布局总结
+# ============================================================
+# Offset 0-3:   Temperature_1 状态 (4 bytes)
+# Offset 4-7:   Temperature_2 状态 (4 bytes)
+# Offset 8-11:  Temperature_3 状态 (4 bytes)
+# Offset 12-15: Temperature_4 状态 (4 bytes)
+# Offset 16-19: Temperature_5 状态 (4 bytes)
+# Offset 20-23: Temperature_6 状态 (4 bytes)
+# Offset 24-27: ElectricityMeter_1 状态 (4 bytes)
+# Offset 28-31: ElectricityMeter_ImpE_1 状态 (4 bytes)
+# Offset 32-35: ElectricityMeter_2 状态 (4 bytes)
+# Offset 36-39: ElectricityMeter_ImpE_2 状态 (4 bytes)
+# Offset 40-43: ElectricityMeter_3 状态 (4 bytes)
+# Offset 44-47: ElectricityMeter_ImpE_3 状态 (4 bytes)
+# Offset 48-51: ElectricityMeter_4 状态 (4 bytes)
+# Offset 52-55: ElectricityMeter_ImpE_4 状态 (4 bytes)
+# Offset 56-59: ElectricityMeter_5 状态 (4 bytes)
+# Offset 60-63: ElectricityMeter_ImpE_5 状态 (4 bytes)
+# Offset 64-67: ElectricityMeter_6 状态 (4 bytes)
+# Offset 68-71: ElectricityMeter_ImpE_6 状态 (4 bytes)
+# ============================================================
+# 总计: 6×4 + 12×4 = 24 + 48 = 72 bytes
+# ============================================================

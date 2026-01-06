@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import health, config, hopper, roller, scr_fan, devices, status, sensor_health
+from app.routers import health, config, hopper, roller, scr_fan, devices, status
 from app.services.polling_service import start_polling, stop_polling
 from config import get_settings
 
@@ -58,6 +58,16 @@ async def lifespan(app: FastAPI):
     print("🛑 应用关闭中...")
     if settings.enable_polling:
         await stop_polling()
+    
+    # 🔧 关闭 InfluxDB 客户端
+    from app.core.influxdb import close_influx_client
+    close_influx_client()
+    
+    # 🔧 关闭本地缓存数据库连接
+    from app.core.local_cache import get_local_cache
+    get_local_cache().close()
+    
+    print("✅ 所有资源已释放")
 
 
 # ------------------------------------------------------------
@@ -88,7 +98,6 @@ def create_app() -> FastAPI:
     app.include_router(scr_fan.router)
     app.include_router(devices.router)
     app.include_router(status.router)
-    app.include_router(sensor_health.router)
     app.include_router(config.router, prefix="/api/config", tags=["系统配置"])
     
     return app

@@ -53,8 +53,11 @@ class InfluxDBMigration:
         
         self.client = None
     
-    def connect(self):
-        """连接到 InfluxDB"""
+    def connect(self) -> bool:
+        """连接到 InfluxDB
+        
+        # 1, 连接失败时确保资源正确释放
+        """
         try:
             self.client = InfluxDBClient(
                 url=self.url,
@@ -65,13 +68,24 @@ class InfluxDBMigration:
             self.client.ping()
             return True
         except Exception as e:
+            # 1, 连接失败时关闭已创建的 client，防止泄漏
+            if self.client:
+                try:
+                    self.client.close()
+                except Exception:
+                    pass
+                self.client = None
             print(f"❌ InfluxDB 连接失败: {e}")
             return False
     
-    def disconnect(self):
+    def disconnect(self) -> None:
         """断开连接"""
         if self.client:
-            self.client.close()
+            try:
+                self.client.close()
+            except Exception:
+                pass
+            self.client = None
     
     # ------------------------------------------------------------
     # 1. check_and_create_bucket() - 检查并创建 Bucket

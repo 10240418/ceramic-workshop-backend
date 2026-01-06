@@ -109,20 +109,25 @@ class S7Client:
 # ------------------------------------------------------------
 # 全局客户端实例
 # ------------------------------------------------------------
+import threading
+
 _s7_client: Optional[S7Client] = None
+_s7_client_lock = threading.Lock()  # 🔧 添加线程锁
 
 
 def get_s7_client() -> S7Client:
-    """获取S7客户端单例"""
+    """获取S7客户端单例（线程安全）"""
     global _s7_client
     if _s7_client is None:
-        settings = get_settings()
-        _s7_client = S7Client(
-            ip=settings.plc_ip,
-            rack=settings.plc_rack,
-            slot=settings.plc_slot,
-            timeout_ms=settings.plc_timeout  # config.py uses plc_timeout not plc_timeout_ms
-        )
+        with _s7_client_lock:  # 🔧 双重检查锁定
+            if _s7_client is None:
+                settings = get_settings()
+                _s7_client = S7Client(
+                    ip=settings.plc_ip,
+                    rack=settings.plc_rack,
+                    slot=settings.plc_slot,
+                    timeout_ms=settings.plc_timeout
+                )
     return _s7_client
 
 

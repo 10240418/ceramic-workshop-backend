@@ -1,18 +1,11 @@
-# ============================================================
-# 文件说明: hopper.py - 料仓设备API路由
-# ============================================================
-# 接口列表:
-# 1. GET /api/hopper/realtime/batch    - 批量获取所有料仓实时数据（内存缓存）
-# 2. GET /api/hopper/{device_id}       - 获取料仓实时数据（内存缓存）
-# 3. GET /api/hopper/{device_id}/history - 获取料仓历史数据（InfluxDB）
-# ============================================================
+# 料仓设备API路由
 
 from fastapi import APIRouter, Query, Path
 from typing import Optional
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
-from app.services.history_query_service import HistoryQueryService
+from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
     get_latest_data,
     get_latest_device_data,
@@ -22,11 +15,8 @@ from app.services.polling_service import (
 )
 
 router = APIRouter(prefix="/api/hopper", tags=["料仓设备"])
+# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
 
-# 初始化查询服务（用于历史数据查询）
-query_service = HistoryQueryService()
-
-# 料仓设备类型
 HOPPER_TYPES = ["short_hopper", "no_hopper", "long_hopper"]
 
 # 静态设备列表（避免查询 InfluxDB）
@@ -99,15 +89,24 @@ async def get_all_hoppers_realtime(
     try:
         # 从内存缓存获取数据
         if hopper_type:
-            # 按类型筛选
             devices_data = get_latest_devices_by_type(hopper_type)
         else:
-            # 获取所有料仓类型
             all_data = get_latest_data()
             devices_data = [
                 data for data in all_data.values()
                 if data.get('device_type') in HOPPER_TYPES
             ]
+        
+        # 数据有效性检查
+        if not devices_data:
+            return ApiResponse.ok({
+                "total": 0,
+                "source": "cache",
+                "timestamp": get_latest_timestamp(),
+                "polling_running": is_polling_running(),
+                "warning": "缓存为空，轮询服务可能未启动或首次轮询未完成",
+                "devices": []
+            })
         
         return ApiResponse.ok({
             "total": len(devices_data),
@@ -155,7 +154,7 @@ async def get_hopper_realtime(
             })
         
         # 缓存无数据，查询 InfluxDB
-        data = query_service.query_device_realtime(device_id)
+        data = get_history_service().query_device_realtime(device_id)
         if not data:
             return ApiResponse.fail(f"设备 {device_id} 不存在或无数据")
         return ApiResponse.ok({
@@ -208,7 +207,7 @@ async def get_hopper_history(
         # 解析字段列表
         field_list = fields.split(",") if fields else None
         
-        data = query_service.query_device_history(
+        data = get_history_service().query_device_history(
             device_id=device_id,
             start=start,
             end=end,

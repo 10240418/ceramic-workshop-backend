@@ -60,6 +60,7 @@ class PLCManager:
         self._last_read_time: Optional[datetime] = None
         self._connect_count: int = 0
         self._error_count: int = 0
+        self._consecutive_error_count: int = 0  # 🔧 连续错误计数
         self._last_error: str = ""
         
         # 线程锁
@@ -69,6 +70,7 @@ class PLCManager:
         self._reconnect_interval: float = 5.0  # 重连间隔（秒）
         self._max_reconnect_attempts: int = 3  # 最大重连次数
         self._health_check_interval: float = 30.0  # 健康检查间隔
+        self._max_consecutive_errors: int = 10  # 🔧 连续错误达到此值则强制重连
         
         print(f"📡 PLC Manager 初始化: {self._ip}:{self._rack}/{self._slot}")
     
@@ -174,15 +176,23 @@ class PLCManager:
             (success, data, error_message)
         """
         with self._rw_lock:
+            # 🔧 检查连续错误，强制重连
+            if self._consecutive_error_count >= self._max_consecutive_errors:
+                print(f"⚠️ 连续 {self._consecutive_error_count} 次错误，强制重连 PLC...")
+                self._disconnect_internal()
+                self._consecutive_error_count = 0
+            
             # 确保连接
             if not self._connected:
                 success, err = self._connect_internal()
                 if not success:
+                    self._consecutive_error_count += 1
                     return (False, b"", f"连接失败: {err}")
             
             # 模拟模式
             if not SNAP7_AVAILABLE:
                 self._last_read_time = datetime.now(timezone.utc)
+                self._consecutive_error_count = 0
                 return (True, bytes(size), "模拟数据")
             
             # 读取数据（带重试）
@@ -191,10 +201,12 @@ class PLCManager:
                     data = self._client.db_read(db_number, start, size)
                     self._last_read_time = datetime.now(timezone.utc)
                     self._error_count = 0
+                    self._consecutive_error_count = 0  # 🔧 成功后重置
                     return (True, bytes(data), "")
                 
                 except Exception as e:
                     self._error_count += 1
+                    self._consecutive_error_count += 1
                     self._last_error = str(e)
                     
                     # 尝试重连

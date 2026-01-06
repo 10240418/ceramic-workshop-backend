@@ -1,0 +1,132 @@
+# ============================================================
+# DB11 状态位配置文件 - SCR设备和风机状态监控
+# ============================================================
+# 根据 PLC 截图中的 SCRDeviceState [DB11] 结构
+# 每个模块状态: Error(Bool) + Status(Word) = 4字节
+# ============================================================
+
+db_config:
+  db_number: 11
+  db_name: "SCRDeviceState"
+  total_size: 40
+  description: "SCR设备和风机状态数据块"
+
+# ============================================================
+# 模块状态结构说明
+# ============================================================
+# ModuleStatus: Error(Bool, offset 0) + Status(Word, offset 2) = 4 bytes
+#
+# SCR设备 (2台):
+#   - 每台包含: FlowMeter + ElectricityMeter + ElectricityMeter_ImpEp = 12字节
+# 风机 (2台):
+#   - 每台包含: ElectricityMeter + ElectricityMeter_ImpEp = 8字节
+# ============================================================
+
+# ============================================================
+# SCR设备状态 (SCR_1, SCR_2) - 每个12字节
+# 偏移: 0, 12
+# 模块顺序: FlowMeter(4) + ElectricityMeter(4) + ElectricityMeter_ImpEp(4)
+# ============================================================
+scr_status:
+  - device_id: "status_scr_1"
+    device_name: "1号SCR设备状态"
+    device_type: "scr_status"
+    start_offset: 0
+    total_size: 12
+    modules:
+      - module_type: "ModuleStatus"
+        offset: 0
+        size: 4
+        tag: "flow_meter"
+        description: "流量计状态"
+      - module_type: "ModuleStatus"
+        offset: 4
+        size: 4
+        tag: "electricity_meter"
+        description: "电表状态"
+      - module_type: "ModuleStatus"
+        offset: 8
+        size: 4
+        tag: "electricity_meter_impe"
+        description: "电能电表状态"
+
+  - device_id: "status_scr_2"
+    device_name: "2号SCR设备状态"
+    device_type: "scr_status"
+    start_offset: 12
+    total_size: 12
+    modules:
+      - module_type: "ModuleStatus"
+        offset: 12
+        size: 4
+        tag: "flow_meter"
+        description: "流量计状态"
+      - module_type: "ModuleStatus"
+        offset: 16
+        size: 4
+        tag: "electricity_meter"
+        description: "电表状态"
+      - module_type: "ModuleStatus"
+        offset: 20
+        size: 4
+        tag: "electricity_meter_impe"
+        description: "电能电表状态"
+
+# ============================================================
+# 风机状态 (FAN_1, FAN_2) - 每个8字节
+# 偏移: 24, 32
+# 模块顺序: ElectricityMeter(4) + ElectricityMeter_ImpEp(4)
+# ============================================================
+fan_status:
+  - device_id: "status_fan_1"
+    device_name: "1号风机状态"
+    device_type: "fan_status"
+    start_offset: 24
+    total_size: 8
+    modules:
+      - module_type: "ModuleStatus"
+        offset: 24
+        size: 4
+        tag: "electricity_meter"
+        description: "电表状态"
+      - module_type: "ModuleStatus"
+        offset: 28
+        size: 4
+        tag: "electricity_meter_impe"
+        description: "电能电表状态"
+
+  - device_id: "status_fan_2"
+    device_name: "2号风机状态"
+    device_type: "fan_status"
+    start_offset: 32
+    total_size: 8
+    modules:
+      - module_type: "ModuleStatus"
+        offset: 32
+        size: 4
+        tag: "electricity_meter"
+        description: "电表状态"
+      - module_type: "ModuleStatus"
+        offset: 36
+        size: 4
+        tag: "electricity_meter_impe"
+        description: "电能电表状态"
+
+# ============================================================
+# DB块布局总结
+# ============================================================
+# SCR:
+#   Offset 0-3:   SCR_1 FlowMeter 状态 (4 bytes)
+#   Offset 4-7:   SCR_1 ElectricityMeter 状态 (4 bytes)
+#   Offset 8-11:  SCR_1 ElectricityMeter_ImpEp 状态 (4 bytes)
+#   Offset 12-15: SCR_2 FlowMeter 状态 (4 bytes)
+#   Offset 16-19: SCR_2 ElectricityMeter 状态 (4 bytes)
+#   Offset 20-23: SCR_2 ElectricityMeter_ImpEp 状态 (4 bytes)
+# FAN:
+#   Offset 24-27: FAN_1 ElectricityMeter 状态 (4 bytes)
+#   Offset 28-31: FAN_1 ElectricityMeter_ImpEp 状态 (4 bytes)
+#   Offset 32-35: FAN_2 ElectricityMeter 状态 (4 bytes)
+#   Offset 36-39: FAN_2 ElectricityMeter_ImpEp 状态 (4 bytes)
+# ============================================================
+# 总计: 2×12 + 2×8 = 24 + 16 = 40 bytes
+# ============================================================

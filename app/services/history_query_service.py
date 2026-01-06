@@ -24,13 +24,30 @@ from app.core.timezone_utils import to_beijing, beijing_isoformat
 settings = get_settings()
 
 
+# 🔧 单例实例
+_history_service_instance: Optional['HistoryQueryService'] = None
+
+
 class HistoryQueryService:
-    """历史数据查询服务"""
+    """历史数据查询服务（单例模式）"""
     
     def __init__(self):
-        self.client = get_influx_client()
-        self.query_api = self.client.query_api()
+        self._client = None  # 🔧 延迟初始化
+        self._query_api = None
         self.bucket = settings.influx_bucket
+    
+    @property
+    def client(self):
+        """延迟获取 InfluxDB 客户端"""
+        if self._client is None:
+            self._client = get_influx_client()
+        return self._client
+    
+    @property
+    def query_api(self):
+        """延迟获取 query_api，确保使用最新的 client"""
+        # 🔧 每次都从当前 client 获取，避免旧 client 过期
+        return self.client.query_api()
     
     # ------------------------------------------------------------
     # 0. get_latest_db_timestamp() - 获取数据库中最新数据的时间戳
@@ -261,11 +278,21 @@ class HistoryQueryService:
         
         filter_str = ' and '.join(filters)
         
-        # 将本地时间转换为UTC时间（假设输入是本地时间）
-        # 获取本地时区偏移量并转换
-        local_tz_offset = datetime.now().astimezone().utcoffset()
-        start_utc = start - local_tz_offset if local_tz_offset else start
-        end_utc = end - local_tz_offset if local_tz_offset else end
+        # 🔧 修复时区转换逻辑：检查输入时间是否已有时区信息
+        def to_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                # 无时区信息，假设是本地时间，转换为UTC
+                local_tz_offset = datetime.now().astimezone().utcoffset()
+                return dt - local_tz_offset if local_tz_offset else dt
+            elif dt.tzinfo == timezone.utc:
+                # 已经是UTC
+                return dt.replace(tzinfo=None)
+            else:
+                # 其他时区，转换为UTC
+                return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        
+        start_utc = to_utc(start)
+        end_utc = to_utc(end)
         
         query = f'''
         from(bucket: "{self.bucket}")
@@ -472,10 +499,21 @@ class HistoryQueryService:
 
 
 # ============================================================
+# 🔧 获取单例服务实例
+# ============================================================
+def get_history_service() -> HistoryQueryService:
+    """获取历史查询服务单例"""
+    global _history_service_instance
+    if _history_service_instance is None:
+        _history_service_instance = HistoryQueryService()
+    return _history_service_instance
+
+
+# ============================================================
 # 使用示例
 # ============================================================
 if __name__ == "__main__":
-    service = HistoryQueryService()
+    service = get_history_service()  # 🔧 使用单例获取函数
     
     # 测试查询实时数据
     print("=== 测试查询实时数据 ===")

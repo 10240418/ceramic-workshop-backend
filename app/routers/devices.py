@@ -10,12 +10,11 @@ from fastapi import APIRouter, Path
 from typing import Dict, Any
 
 from app.models.response import ApiResponse
-from app.services.history_query_service import HistoryQueryService
+from app.services.history_query_service import get_history_service
 
 router = APIRouter(prefix="/api/devices", tags=["通用设备查询"])
 
-# 初始化查询服务
-query_service = HistoryQueryService()
+# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
 
 
 # ============================================================
@@ -94,7 +93,7 @@ async def get_db_devices_realtime(
         device_list = []
         
         # 先尝试从数据库查询
-        all_devices = query_service.query_device_list()
+        all_devices = get_history_service().query_device_list()
         for device in all_devices:
             # 根据 device_id 判断属于哪个 DB 块
             if db_number == 8:  # 料仓
@@ -112,7 +111,7 @@ async def get_db_devices_realtime(
         for device_info in device_list:
             device_id = device_info["device_id"]
             try:
-                realtime_data = query_service.query_device_realtime(device_id)
+                realtime_data = get_history_service().query_device_realtime(device_id)
                 if realtime_data:
                     devices_data.append({
                         "device_id": device_id,
@@ -155,7 +154,7 @@ async def get_db_devices_list(
     """
     try:
         # 查询该 DB 块下所有设备
-        all_devices = query_service.query_device_list()
+        all_devices = get_history_service().query_device_list()
         device_list = []
         
         for device in all_devices:

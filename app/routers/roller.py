@@ -13,7 +13,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
-from app.services.history_query_service import HistoryQueryService
+from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
     get_latest_device_data,
     get_latest_timestamp,
@@ -22,8 +22,7 @@ from app.services.polling_service import (
 
 router = APIRouter(prefix="/api/roller", tags=["辊道窑设备"])
 
-# 初始化查询服务（用于历史数据）
-query_service = HistoryQueryService()
+# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
 
 # 辊道窑设备ID
 ROLLER_KILN_ID = "roller_kiln_1"
@@ -92,7 +91,7 @@ async def get_roller_realtime():
             })
         
         # 缓存无数据，查询 InfluxDB
-        data = query_service.query_device_realtime(ROLLER_KILN_ID)
+        data = get_history_service().query_device_realtime(ROLLER_KILN_ID)
         if not data:
             return ApiResponse.fail("辊道窑设备无数据")
         return ApiResponse.ok({
@@ -150,7 +149,7 @@ async def get_roller_realtime_formatted():
             raw_data = cached_data
         else:
             # 缓存无数据，回退到 InfluxDB 查询
-            raw_data = query_service.query_device_realtime(ROLLER_KILN_ID)
+            raw_data = get_history_service().query_device_realtime(ROLLER_KILN_ID)
         
         if not raw_data:
             return ApiResponse.fail("辊道窑设备无数据")
@@ -255,7 +254,7 @@ async def get_roller_history(
         if zone and module_type == "ElectricityMeter":
             module_tag = f"{zone}_meter"
         
-        data = query_service.query_device_history(
+        data = get_history_service().query_device_history(
             device_id=ROLLER_KILN_ID,
             start=start,
             end=end,
@@ -310,7 +309,7 @@ async def get_zone_realtime(
     
     try:
         # 查询设备实时数据
-        data = query_service.query_device_realtime(ROLLER_KILN_ID)
+        data = get_history_service().query_device_realtime(ROLLER_KILN_ID)
         if not data:
             return ApiResponse.fail("辊道窑设备无数据")
         

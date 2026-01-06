@@ -13,14 +13,31 @@ polling_config:
   batch_write_size: 20  # 批量写入间隔 (次数) - 避免缓冲区溢出
 
 # ============================================================
-# 状态位配置 - 用于检测设备通信状态
+# 设备状态位配置 - 用于检测各设备模块通信状态
 # ============================================================
-status_config:
+# 后端只负责读取原始字节数据并缓存，前端负责解析
+# ============================================================
+device_status_config:
   enabled: true
-  db_number: 1  # 状态位所在的 DB 块号
-  total_size: 268  # 状态块大小 (根据config_status.yaml计算)
-  config_file: "configs/config_status.yaml"
-  description: "设备通信状态监控"
+  poll_with_data: true  # 与数据轮询同步读取
+  db_blocks:
+    # DB3 - 料仓(回转窑)设备状态
+    - db_number: 3
+      db_name: "KilnState"
+      total_size: 148
+      description: "料仓设备状态（4短有称重+2短无称重+3长有称重）"
+
+    # DB7 - 辊道窑设备状态
+    - db_number: 7
+      db_name: "RollerKilnState"
+      total_size: 72
+      description: "辊道窑设备状态（6温度+6×2电表）"
+
+    # DB11 - SCR设备和风机状态
+    - db_number: 11
+      db_name: "SCRDeviceState"
+      total_size: 40
+      description: "SCR设备和风机状态（2SCR+2风机）"
 
 # ============================================================
 # 数据块映射

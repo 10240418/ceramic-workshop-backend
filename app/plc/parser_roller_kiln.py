@@ -24,20 +24,24 @@ class RollerKilnParser:
     - 6个温度传感器 (对应6个温区)
     """
     
+    # 项目根目录 (ceramic-workshop-backend/)
+    PROJECT_ROOT = Path(__file__).parent.parent.parent
+    
     # ------------------------------------------------------------
     # 1. __init__() - 初始化解析器
     # ------------------------------------------------------------
     def __init__(self, 
-                 db_config_path: str = "configs/config_roller_kiln.yaml",
-                 module_config_path: str = "configs/plc_modules.yaml"):
+                 db_config_path: str = None,
+                 module_config_path: str = None):
         """初始化解析器
         
         Args:
             db_config_path: DB7配置文件路径
             module_config_path: 基础模块配置文件路径
         """
-        self.db_config_path = Path(db_config_path)
-        self.module_config_path = Path(module_config_path)
+        # 使用绝对路径，避免工作目录问题
+        self.db_config_path = Path(db_config_path) if db_config_path else self.PROJECT_ROOT / "configs" / "config_roller_kiln_9.yaml"
+        self.module_config_path = Path(module_config_path) if module_config_path else self.PROJECT_ROOT / "configs" / "plc_modules.yaml"
         
         self.db_config = None
         self.base_modules = {}   # 基础模块定义

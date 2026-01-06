@@ -1,13 +1,14 @@
 # ============================================================
 # 文件说明: local_cache.py - 本地 SQLite 降级缓存
 # ============================================================
-# 当 InfluxDB 不可用时，数据暂存到本地 SQLite
-# InfluxDB 恢复后自动重试写入
+# 1, 当 InfluxDB 不可用时，数据暂存到本地 SQLite
+# 2, InfluxDB 恢复后自动重试写入
 # ============================================================
 
 import sqlite3
 import json
 import threading
+import atexit
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional
@@ -17,8 +18,12 @@ from config import get_settings
 
 settings = get_settings()
 
-# 缓存文件路径
+# 3, 缓存文件路径
 CACHE_DB_PATH = Path(getattr(settings, 'local_cache_path', 'data/cache.db'))
+
+# 4, 模块级单例 (避免类级别竞态条件)
+_cache_instance: Optional['LocalCache'] = None
+_cache_lock = threading.Lock()
 
 
 @dataclass
@@ -41,33 +46,34 @@ class CachedPoint:
 
 
 class LocalCache:
-    """本地 SQLite 缓存管理器"""
+    """本地 SQLite 缓存管理器
     
-    _instance: Optional['LocalCache'] = None
-    _lock = threading.Lock()
-    
-    def __new__(cls):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
+    # 5, 使用 WAL 模式提高并发性能
+    # 6, 线程锁保护数据库操作
+    """
     
     def __init__(self):
-        if self._initialized:
-            return
-        
-        self._initialized = True
         self._conn: Optional[sqlite3.Connection] = None
+        # 6, 线程锁保护数据库操作
         self._db_lock = threading.Lock()
         self._init_db()
+        
+        # 7, 注册退出时关闭连接
+        atexit.register(self.close)
     
-    def _init_db(self):
-        """初始化 SQLite 数据库"""
+    def _init_db(self) -> None:
+        """初始化 SQLite 数据库
+        
+        # 5, WAL 模式配置提高并发性能
+        """
         CACHE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         
-        self._conn = sqlite3.connect(str(CACHE_DB_PATH), check_same_thread=False)
+        # 5, WAL 模式配置
+        self._conn = sqlite3.connect(str(CACHE_DB_PATH), check_same_thread=False, timeout=30)
+        self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA cache_size=10000")
+        
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS pending_points (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -93,8 +99,10 @@ class LocalCache:
             print(f"⚠️ 本地缓存有 {count} 条待写入数据")
     
     def save_points(self, points: List[CachedPoint]) -> int:
-        """
-        保存数据点到本地缓存
+        """保存数据点到本地缓存
+        
+        # 1, 当 InfluxDB 不可用时的降级存储
+        # 6, 使用锁保证线程安全
         
         Args:
             points: 数据点列表
@@ -105,13 +113,11 @@ class LocalCache:
         if not points:
             return 0
         
+        # 6, 使用锁保证线程安全
         with self._db_lock:
             try:
                 now = datetime.now(timezone.utc).isoformat()
-                data = [
-                    (p.measurement, p.to_json(), p.retry_count, now)
-                    for p in points
-                ]
+                data = [(p.measurement, p.to_json(), p.retry_count, now) for p in points]
                 self._conn.executemany(
                     "INSERT INTO pending_points (measurement, data_json, retry_count, created_at) VALUES (?, ?, ?, ?)",
                     data
@@ -123,8 +129,9 @@ class LocalCache:
                 return 0
     
     def get_pending_points(self, limit: int = 100, max_retry: int = 5) -> List[tuple]:
-        """
-        获取待重试的数据点
+        """获取待重试的数据点
+        
+        # 2, InfluxDB 恢复后自动重试写入
         
         Args:
             limit: 最大获取数量
@@ -136,12 +143,7 @@ class LocalCache:
         with self._db_lock:
             try:
                 cursor = self._conn.execute(
-                    """
-                    SELECT id, data_json FROM pending_points 
-                    WHERE retry_count < ? 
-                    ORDER BY created_at ASC 
-                    LIMIT ?
-                    """,
+                    "SELECT id, data_json FROM pending_points WHERE retry_count < ? ORDER BY created_at ASC LIMIT ?",
                     (max_retry, limit)
                 )
                 results = []
@@ -150,43 +152,34 @@ class LocalCache:
                         point = CachedPoint.from_json(row[1])
                         results.append((row[0], point))
                     except Exception:
-                        pass
+                        pass  # 跳过解析失败的记录
                 return results
             except Exception as e:
                 print(f"❌ 读取本地缓存失败: {e}")
                 return []
     
-    def mark_success(self, ids: List[int]):
+    def mark_success(self, ids: List[int]) -> None:
         """标记数据点写入成功（删除）"""
         if not ids:
             return
-        
         with self._db_lock:
             try:
                 placeholders = ",".join("?" * len(ids))
-                self._conn.execute(
-                    f"DELETE FROM pending_points WHERE id IN ({placeholders})",
-                    ids
-                )
+                self._conn.execute(f"DELETE FROM pending_points WHERE id IN ({placeholders})", ids)
                 self._conn.commit()
             except Exception as e:
                 print(f"❌ 删除缓存记录失败: {e}")
     
-    def mark_retry(self, ids: List[int]):
+    def mark_retry(self, ids: List[int]) -> None:
         """标记数据点需要重试（增加重试计数）"""
         if not ids:
             return
-        
         with self._db_lock:
             try:
                 now = datetime.now(timezone.utc).isoformat()
                 placeholders = ",".join("?" * len(ids))
                 self._conn.execute(
-                    f"""
-                    UPDATE pending_points 
-                    SET retry_count = retry_count + 1, last_retry_at = ? 
-                    WHERE id IN ({placeholders})
-                    """,
+                    f"UPDATE pending_points SET retry_count = retry_count + 1, last_retry_at = ? WHERE id IN ({placeholders})",
                     [now] + ids
                 )
                 self._conn.commit()
@@ -213,7 +206,7 @@ class LocalCache:
             except Exception:
                 return {"pending_count": 0, "failed_count": 0, "oldest_record": None}
     
-    def cleanup_old(self, days: int = 7):
+    def cleanup_old(self, days: int = 7) -> None:
         """清理超过指定天数的失败记录"""
         with self._db_lock:
             try:
@@ -229,14 +222,27 @@ class LocalCache:
             except Exception as e:
                 print(f"❌ 清理缓存失败: {e}")
     
-    def close(self):
-        """关闭数据库连接"""
+    def close(self) -> None:
+        """关闭数据库连接
+        
+        # 7, 退出时自动调用 (atexit 注册)
+        """
         if self._conn:
-            self._conn.close()
+            try:
+                self._conn.close()
+            except Exception:
+                pass
             self._conn = None
 
 
-# 全局单例
 def get_local_cache() -> LocalCache:
-    """获取本地缓存单例"""
-    return LocalCache()
+    """获取本地缓存单例
+    
+    # 4, 使用模块级锁避免竞态条件
+    """
+    global _cache_instance
+    if _cache_instance is None:
+        with _cache_lock:
+            if _cache_instance is None:
+                _cache_instance = LocalCache()
+    return _cache_instance

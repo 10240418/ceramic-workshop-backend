@@ -103,21 +103,7 @@ async def database_health():
 # ------------------------------------------------------------
 @router.get("/health/polling")
 async def polling_health():
-    """轮询服务状态检查
-    
-    返回:
-    - polling_running: 轮询服务是否运行
-    - total_polls: 总轮询次数
-    - successful_writes: 成功写入次数
-    - failed_writes: 写入失败次数
-    - cached_points: 缓存的数据点数
-    - retry_success: 重试成功次数
-    - buffer_size: 当前缓冲区大小
-    - batch_size: 批量写入阈值
-    - devices_in_cache: 缓存的设备数
-    - cache_stats: 本地缓存统计
-    - plc_status: PLC 连接状态
-    """
+    """轮询服务状态检查"""
     try:
         stats = get_polling_stats()
         return ApiResponse.ok({
@@ -129,7 +115,97 @@ async def polling_health():
 
 
 # ------------------------------------------------------------
-# 5. GET /health/latest-timestamp - 获取数据库中最新数据的时间戳
+# 5. GET /health/diagnose - 全面诊断（排查全0数据问题）
+# ------------------------------------------------------------
+@router.get("/health/diagnose")
+async def diagnose_zero_data():
+    """全面诊断 - 用于排查 batch API 返回全 0 数据的问题
+    
+    检查项:
+    1. mock_mode 配置
+    2. snap7 可用性
+    3. PLC 连接状态
+    4. 轮询服务状态
+    5. 缓存数据状态
+    """
+    from app.services.polling_service import get_latest_data
+    
+    issues = []
+    
+    # 1. 检查 mock_mode
+    mock_mode = settings.mock_mode
+    
+    # 2. 检查 snap7
+    try:
+        from app.plc.plc_manager import get_plc_manager, SNAP7_AVAILABLE
+        snap7_ok = SNAP7_AVAILABLE
+    except Exception as e:
+        snap7_ok = False
+        issues.append(f"snap7导入异常: {e}")
+    
+    # 3. 检查 PLC 连接
+    plc_connected = False
+    if not mock_mode:
+        try:
+            plc = get_plc_manager()
+            status = plc.get_status(check_realtime=True)
+            plc_connected = status.get("connected", False)
+        except Exception as e:
+            issues.append(f"PLC状态检查失败: {e}")
+    
+    # 4. 检查轮询服务
+    polling_running = is_polling_running()
+    stats = get_polling_stats()
+    
+    # 5. 检查缓存数据
+    cache_data = get_latest_data()
+    cache_count = len(cache_data)
+    
+    # 检查是否有全 0 数据
+    zero_data_devices = []
+    for device_id, device_data in cache_data.items():
+        modules = device_data.get("modules", {})
+        for module_tag, module_info in modules.items():
+            fields = module_info.get("fields", {})
+            if all(v == 0 or v == 0.0 for v in fields.values() if isinstance(v, (int, float))):
+                zero_data_devices.append(f"{device_id}.{module_tag}")
+    
+    # 诊断结论
+    if not mock_mode and not snap7_ok:
+        issues.append("❌ 关键问题: MOCK_MODE=false 但 snap7 不可用，会导致全 0 数据")
+    if not mock_mode and not plc_connected:
+        issues.append("❌ PLC 未连接，无法读取真实数据")
+    if not polling_running:
+        issues.append("⚠️ 轮询服务未运行")
+    if cache_count == 0:
+        issues.append("⚠️ 缓存为空，可能尚未完成首次轮询")
+    if zero_data_devices:
+        issues.append(f"⚠️ 发现 {len(zero_data_devices)} 个模块数据全为 0")
+    
+    return ApiResponse.ok({
+        "config": {
+            "mock_mode": mock_mode,
+            "snap7_available": snap7_ok,
+            "plc_ip": settings.plc_ip,
+            "poll_interval": settings.plc_poll_interval
+        },
+        "status": {
+            "plc_connected": plc_connected if not mock_mode else "N/A (mock mode)",
+            "polling_running": polling_running,
+            "total_polls": stats.get("total_polls", 0),
+            "devices_in_cache": cache_count
+        },
+        "zero_data_check": {
+            "devices_with_zero_data": zero_data_devices[:10],  # 最多显示 10 个
+            "total_zero_count": len(zero_data_devices)
+        },
+        "issues": issues,
+        "recommendation": "切换为 mock 模式: docker compose --profile mock up -d" if issues else "系统正常"
+    })
+
+
+# ------------------------------------------------------------
+# 6. GET /health/latest-timestamp - 获取数据库中最新数据的时间戳
 # ------------------------------------------------------------
 @router.get("/health/latest-timestamp")
 async def get_latest_timestamp():

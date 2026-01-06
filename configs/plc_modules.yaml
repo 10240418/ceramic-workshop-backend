@@ -295,6 +295,33 @@ modules:
 
 
 # ============================================================
+# 5. 模块状态模块 (ModuleStatus) - 用于回转窑状态位
+# ============================================================
+# 每个模块状态占用 4 字节
+# 结构: Error(Bool) + 保留(1byte) + Status(Word)
+# 用于监控各模块（称重、温度、电表）的通信状态
+  - name: ModuleStatus
+    description: 模块通信状态 (Error + Status)
+    total_size: 4
+    fields:
+      - name: Error
+        display_name: 错误标志
+        data_type: Bool
+        offset: 0
+        bit: 0
+        size: 1
+        unit: ""
+        scale: 1.0
+      - name: Status
+        display_name: 状态码
+        data_type: Word
+        offset: 2
+        size: 2
+        unit: ""
+        scale: 1.0
+
+
+# ============================================================
 # 完整数据块布局 (单个设备)
 # ============================================================
 # Offset 0-13:  WeighSensor (14 bytes) - 基础+高精度

@@ -53,7 +53,8 @@ class Settings(BaseSettings):
     devices_config_file: str = "configs/devices.yaml"
     
     # JWT 配置 (可选，用于后续认证)
-    secret_key: str = "ceramic-workshop-secret-key-change-in-production"
+    # ⚠️ 生产环境必须通过环境变量 SECRET_KEY 设置！
+    secret_key: str = "ceramic-workshop-dev-only-change-in-production"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60 * 24  # 24小时
     

@@ -16,7 +16,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
-from app.services.history_query_service import HistoryQueryService
+from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
     get_latest_data,
     get_latest_device_data,
@@ -26,8 +26,7 @@ from app.services.polling_service import (
 
 router = APIRouter(tags=["SCR设备和风机"])
 
-# 初始化查询服务（用于历史数据）
-query_service = HistoryQueryService()
+# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
 
 # 静态设备列表
 SCR_DEVICES = ["scr_1", "scr_2"]
@@ -155,7 +154,7 @@ async def get_scr_realtime(
             })
         
         # 缓存无数据，查询 InfluxDB
-        data = query_service.query_device_realtime(device_id)
+        data = get_history_service().query_device_realtime(device_id)
         if not data:
             return ApiResponse.fail(f"设备 {device_id} 不存在或无数据")
         return ApiResponse.ok({
@@ -205,7 +204,7 @@ async def get_scr_history(
         # 解析字段列表
         field_list = fields.split(",") if fields else None
         
-        data = query_service.query_device_history(
+        data = get_history_service().query_device_history(
             device_id=device_id,
             start=start,
             end=end,
@@ -283,7 +282,7 @@ async def get_fan_realtime(
             })
         
         # 缓存未命中，查询 InfluxDB
-        data = query_service.query_device_realtime(device_id)
+        data = get_history_service().query_device_realtime(device_id)
         if not data:
             return ApiResponse.fail(f"设备 {device_id} 不存在或无数据")
         return ApiResponse.ok({
@@ -326,7 +325,7 @@ async def get_fan_history(
         # 解析字段列表
         field_list = fields.split(",") if fields else None
         
-        data = query_service.query_device_history(
+        data = get_history_service().query_device_history(
             device_id=device_id,
             start=start,
             end=end,

@@ -73,4 +73,4 @@ Write-Host "=" -NoNewline -ForegroundColor Cyan
 Write-Host ("=" * 59) -ForegroundColor Cyan
 Write-Host "`n按 Ctrl+C 停止服务`n" -ForegroundColor Yellow
 
-python quickstart.py
+python main.py
