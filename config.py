@@ -36,7 +36,9 @@ class Settings(BaseSettings):
     plc_poll_interval: int = 6  # seconds (轮询间隔)
     
     # 批量写入配置
-    batch_write_size: int = 30  # 多少次轮询后批量写入 InfluxDB
+    # 🔧 [CRITICAL] 从30降到10，减少批量写入的数据量
+    # 每次轮询约46个数据点，10次=460点（原来30次=828点阻塞API 2-5秒）
+    batch_write_size: int = 10  # 多少次轮询后批量写入 InfluxDB
     
     # 本地缓存配置
     local_cache_path: str = "data/cache.db"  # SQLite 缓存文件路径

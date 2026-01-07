@@ -19,7 +19,7 @@ from functools import lru_cache
 
 from config import get_settings
 from app.core.influxdb import get_influx_client
-from app.core.timezone_utils import to_beijing, beijing_isoformat
+from app.core.timezone_utils import to_beijing, beijing_isoformat, BEIJING_TZ
 
 settings = get_settings()
 
@@ -281,15 +281,11 @@ class HistoryQueryService:
         # 🔧 修复时区转换逻辑：检查输入时间是否已有时区信息
         def to_utc(dt: datetime) -> datetime:
             if dt.tzinfo is None:
-                # 无时区信息，假设是本地时间，转换为UTC
-                local_tz_offset = datetime.now().astimezone().utcoffset()
-                return dt - local_tz_offset if local_tz_offset else dt
-            elif dt.tzinfo == timezone.utc:
-                # 已经是UTC
-                return dt.replace(tzinfo=None)
-            else:
-                # 其他时区，转换为UTC
-                return dt.astimezone(timezone.utc).replace(tzinfo=None)
+                # 无时区信息，默认视为北京时间
+                dt = dt.replace(tzinfo=BEIJING_TZ)
+            
+            # 转换为UTC
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
         
         start_utc = to_utc(start)
         end_utc = to_utc(end)
@@ -432,10 +428,15 @@ class HistoryQueryService:
         
         filter_str = ' and '.join(filters)
         
-        # 将本地时间转换为UTC时间
-        local_tz_offset = datetime.now().astimezone().utcoffset()
-        start_utc = start - local_tz_offset if local_tz_offset else start
-        end_utc = end - local_tz_offset if local_tz_offset else end
+        # 🔧 修复时区转换逻辑：检查输入时间是否已有时区信息
+        # 如果无时区信息，默认视为北京时间 (因为前端通常传北京时间)
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=BEIJING_TZ)
+        start_utc = start.astimezone(timezone.utc).replace(tzinfo=None)
+
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=BEIJING_TZ)
+        end_utc = end.astimezone(timezone.utc).replace(tzinfo=None)
         
         query = f'''
         from(bucket: "{self.bucket}")

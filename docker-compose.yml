@@ -1,5 +1,4 @@
 services:
-  # InfluxDB 时序数据库
   influxdb:
     image: influxdb:2.7
     container_name: ceramic-influxdb
@@ -16,25 +15,10 @@ services:
       - DOCKER_INFLUXDB_INIT_ORG=ceramic-workshop
       - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
       - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=ceramic-workshop-token
+      - TZ=Asia/Shanghai
     networks:
       - ceramic-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8086/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "3"
-    deploy:
-      resources:
-        limits:
-          memory: 8G
 
-  # Python Backend (正常模式 - 连接真实PLC)
   backend:
     build: .
     container_name: ceramic-backend
@@ -42,74 +26,19 @@ services:
     ports:
       - '8080:8080'
     depends_on:
-      influxdb:
-        condition: service_healthy
+      - influxdb
     volumes:
       - .:/app
-      - ./configs:/app/configs
     environment:
       - PYTHONUNBUFFERED=1
       - INFLUX_URL=http://influxdb:8086
       - INFLUX_TOKEN=ceramic-workshop-token
       - INFLUX_ORG=ceramic-workshop
       - INFLUX_BUCKET=sensor_data
-      - ENABLE_POLLING=true
-      - MOCK_MODE=false
+      - MOCK_MODE=${MOCK_MODE:-true}
+      - TZ=Asia/Shanghai
     networks:
       - ceramic-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-    profiles:
-      - default
-      - production
-
-  # Python Backend (Mock模式 - 使用模拟数据)
-  backend-mock:
-    build: .
-    container_name: ceramic-backend
-    restart: unless-stopped
-    ports:
-      - '8080:8080'
-    depends_on:
-      influxdb:
-        condition: service_healthy
-    volumes:
-      - .:/app
-      - ./configs:/app/configs
-      - ./tests:/app/tests
-    environment:
-      - PYTHONUNBUFFERED=1
-      - INFLUX_URL=http://influxdb:8086
-      - INFLUX_TOKEN=ceramic-workshop-token
-      - INFLUX_ORG=ceramic-workshop
-      - INFLUX_BUCKET=sensor_data
-      - ENABLE_POLLING=true
-      - MOCK_MODE=true
-    networks:
-      - ceramic-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "50m"
-        max-file: "5"
-    profiles:
-      - mock
 
 networks:
   ceramic-network:
-    driver: bridge

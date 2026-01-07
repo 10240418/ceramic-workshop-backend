@@ -38,16 +38,40 @@ class DeviceStatusParser:
             if key == 'db_config' or not isinstance(devices, list):
                 continue
             for device in devices:
-                for module in device.get('modules', []):
-                    status = self.parse_module_status(data, module.get('offset', 0))
+                # 🔧 [FIX] 兼容两种配置格式:
+                # 1. 标准格式 (DB3/DB11): device 包含 modules 列表
+                # 2. 扁平格式 (DB7): device 本身就是模块 (含 offset)
+                
+                modules = device.get('modules')
+                
+                # Case 1: 标准格式 (有 modules 列表)
+                if modules and isinstance(modules, list):
+                    for module in modules:
+                        status = self.parse_module_status(data, module.get('offset', 0))
+                        result.append({
+                            "device_id": f"{device.get('device_id', '')}_{module.get('tag', '')}",
+                            "device_name": f"{device.get('device_name', '')} - {module.get('description', '')}",
+                            "device_type": device.get('device_type', ''),
+                            "module_tag": module.get('tag', ''),
+                            "description": module.get('description', ''),
+                            "db_number": db_number,
+                            "offset": module.get('offset', 0),
+                            **status,
+                            "is_normal": not status["error"] and status["status_code"] == 0,
+                            "timestamp": timestamp
+                        })
+                
+                # Case 2: 扁平格式 (没有 modules，自身包含 offset)
+                elif 'offset' in device:
+                    status = self.parse_module_status(data, device.get('offset', 0))
                     result.append({
-                        "device_id": f"{device.get('device_id', '')}_{module.get('tag', '')}",
-                        "device_name": f"{device.get('device_name', '')} - {module.get('description', '')}",
+                        "device_id": device.get('device_id', ''),
+                        "device_name": device.get('device_name', ''),
                         "device_type": device.get('device_type', ''),
-                        "module_tag": module.get('tag', ''),
-                        "description": module.get('description', ''),
+                        "module_tag": device.get('tag', ''),
+                        "description": device.get('description', ''),
                         "db_number": db_number,
-                        "offset": module.get('offset', 0),
+                        "offset": device.get('offset', 0),
                         **status,
                         "is_normal": not status["error"] and status["status_code"] == 0,
                         "timestamp": timestamp

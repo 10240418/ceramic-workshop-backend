@@ -69,7 +69,13 @@ _device_status_raw: Dict[str, Dict[str, Any]] = {}
 # ============================================================
 _point_buffer: deque = deque(maxlen=1000)  # 最大缓存 1000 个点
 _buffer_count = 0
-_batch_size = 20  # 20 次轮询后批量写入（每次~46点，20次=920点<1000）
+_batch_size = 10  # 🔧 [CRITICAL] 10次轮询后批量写入（每次~46点，10次=460点）
+                   # 缩小批次避免批量写入阻塞 API 请求过久
+
+# 🔧 [NEW] 后台写入任务控制
+_write_queue: asyncio.Queue = None  # 写入队列（异步）
+_write_task: Optional[asyncio.Task] = None  # 后台写入任务
+_write_in_progress = False  # 是否正在写入
 
 # ============================================================
 # 统计信息
@@ -174,8 +180,8 @@ def _init_parsers():
 # 批量写入 & 本地缓存
 # ============================================================
 def _flush_buffer():
-    """刷新缓存：批量写入 InfluxDB 或保存到本地"""
-    global _buffer_count, _stats
+    """刷新缓存：将数据放入异步写入队列（不阻塞）"""
+    global _buffer_count, _write_queue
     
     if len(_point_buffer) == 0:
         return
@@ -185,25 +191,89 @@ def _flush_buffer():
     _point_buffer.clear()
     _buffer_count = 0
     
-    # 检查 InfluxDB 健康状态
+    # 🔧 [CRITICAL] 将数据放入异步队列，不阻塞当前线程
+    if _write_queue is not None:
+        try:
+            _write_queue.put_nowait(points)
+            print(f"📤 已将 {len(points)} 个数据点加入写入队列")
+        except asyncio.QueueFull:
+            print(f"⚠️ 写入队列已满，数据转存到本地缓存")
+            _save_to_local_cache(points)
+    else:
+        # 队列未初始化，使用同步写入（降级）
+        _sync_write_to_influx(points)
+
+
+def _sync_write_to_influx(points: List):
+    """同步写入 InfluxDB（降级模式）"""
+    global _stats
+    
     healthy, msg = check_influx_health()
     
     if healthy:
-        # 尝试写入 InfluxDB
         success, err = write_points_batch(points)
-        
         if success:
             _stats["successful_writes"] += len(points)
             _stats["last_write_time"] = beijing_isoformat()
-            if not settings.verbose_polling_log:
-                print(f"✅ 批量写入 {len(points)} 个数据点到 InfluxDB")
+            print(f"✅ 批量写入 {len(points)} 个数据点到 InfluxDB")
         else:
             print(f"❌ InfluxDB 写入失败: {err}，转存到本地缓存")
             _save_to_local_cache(points)
     else:
-        # InfluxDB 不可用，保存到本地
         print(f"⚠️ InfluxDB 不可用 ({msg})，数据写入本地缓存")
         _save_to_local_cache(points)
+
+
+async def _background_writer():
+    """🔧 [NEW] 后台写入任务 - 异步处理写入队列，不阻塞 API"""
+    global _stats, _write_in_progress, _write_queue
+    
+    print("🚀 后台写入任务已启动")
+    
+    while _is_running:
+        try:
+            # 等待队列中的数据（最多等待 1 秒，允许检查 _is_running）
+            try:
+                points = await asyncio.wait_for(_write_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
+                continue
+            
+            if not points:
+                continue
+            
+            _write_in_progress = True
+            
+            # 检查 InfluxDB 健康状态
+            healthy, msg = check_influx_health()
+            
+            if healthy:
+                # 尝试写入 InfluxDB
+                success, err = write_points_batch(points)
+                
+                if success:
+                    _stats["successful_writes"] += len(points)
+                    _stats["last_write_time"] = beijing_isoformat()
+                    print(f"✅ [后台] 批量写入 {len(points)} 个数据点到 InfluxDB")
+                else:
+                    print(f"❌ [后台] InfluxDB 写入失败: {err}，转存到本地缓存")
+                    _save_to_local_cache(points)
+            else:
+                # InfluxDB 不可用，保存到本地
+                print(f"⚠️ [后台] InfluxDB 不可用 ({msg})，数据写入本地缓存")
+                _save_to_local_cache(points)
+            
+            _write_in_progress = False
+            _write_queue.task_done()
+            
+        except asyncio.CancelledError:
+            print("🛑 后台写入任务已取消")
+            break
+        except Exception as e:
+            print(f"❌ [后台] 写入任务异常: {e}")
+            _write_in_progress = False
+            await asyncio.sleep(1)  # 出错后等待 1 秒再继续
+    
+    print("🛑 后台写入任务已停止")
 
 
 def _save_to_local_cache(points: List):
@@ -451,13 +521,15 @@ async def _poll_data():
             # 检查是否需要批量写入
             _buffer_count += 1
             
-            # 缓冲区满告警 (达到80%容量)
+            # 🔧 [CRITICAL] 缓冲区告警阈值降低（防止阻塞 API 请求）
             buffer_usage = len(_point_buffer) / 1000
-            if buffer_usage > 0.8:
+            if buffer_usage > 0.5:  # 50% 告警（从 80% 降低）
                 print(f"⚠️ 缓冲区使用率过高: {buffer_usage*100:.1f}% (将触发批量写入)")
             
-            # 触发批量写入：达到批次数或缓冲区>800个点
-            if _buffer_count >= _batch_size or len(_point_buffer) >= 800:
+            # 🔧 [CRITICAL] 触发批量写入：达到批次数或缓冲区>500个点（防止阻塞过久）
+            # 原: _buffer_count >= 20 or len(_point_buffer) >= 800
+            # 新: _buffer_count >= 10 or len(_point_buffer) >= 500
+            if _buffer_count >= _batch_size or len(_point_buffer) >= 500:
                 _flush_buffer()
             
             # 日志输出
@@ -664,7 +736,7 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
 # ------------------------------------------------------------
 async def start_polling():
     """启动数据轮询任务（从配置文件动态加载）"""
-    global _polling_task, _retry_task, _is_running, _batch_size
+    global _polling_task, _retry_task, _is_running, _batch_size, _write_queue, _write_task
     
     if _is_running:
         print("⚠️ 轮询服务已在运行")
@@ -682,6 +754,9 @@ async def start_polling():
     
     _is_running = True
     
+    # 🔧 [NEW] 初始化异步写入队列（最多缓存 10 批数据）
+    _write_queue = asyncio.Queue(maxsize=10)
+    
     # 根据模式启动
     if settings.mock_mode:
         print("🎭 Mock模式 - 跳过PLC连接")
@@ -694,6 +769,9 @@ async def start_polling():
         else:
             print(f"⚠️ PLC 连接失败: {err}，将在轮询时重试")
     
+    # 🔧 [NEW] 启动后台写入任务（关键：不阻塞 API）
+    _write_task = asyncio.create_task(_background_writer())
+    
     # 启动轮询任务
     _polling_task = asyncio.create_task(_poll_data())
     _retry_task = asyncio.create_task(_retry_cached_data())
@@ -701,6 +779,7 @@ async def start_polling():
     
     mode_str = "Mock模式" if settings.mock_mode else "正常模式"
     print(f"✅ 轮询服务已启动 ({mode_str}, 间隔: {settings.plc_poll_interval}s, 批量: {_batch_size}次)")
+    print(f"🚀 后台写入模式已启用 - API 请求不会被阻塞")
 
 
 # ------------------------------------------------------------
@@ -708,16 +787,31 @@ async def start_polling():
 # ------------------------------------------------------------
 async def stop_polling():
     """停止数据轮询任务"""
-    global _polling_task, _retry_task, _cleanup_task, _is_running
+    global _polling_task, _retry_task, _cleanup_task, _write_task, _is_running, _write_queue
     
     _is_running = False
     
-    # 刷新缓冲区
+    # 刷新缓冲区（将剩余数据放入队列）
     print("⏳ 正在刷新缓冲区...")
     _flush_buffer()
     
+    # 🔧 [NEW] 等待写入队列处理完成（最多等待 10 秒）
+    if _write_queue is not None:
+        try:
+            await asyncio.wait_for(_write_queue.join(), timeout=10.0)
+            print("✅ 写入队列已清空")
+        except asyncio.TimeoutError:
+            print("⚠️ 写入队列清空超时，部分数据可能丢失")
+    
     # 🔧 取消所有任务，添加超时保护
-    for task_name, task in [("polling", _polling_task), ("retry", _retry_task), ("cleanup", _cleanup_task)]:
+    tasks_to_cancel = [
+        ("polling", _polling_task), 
+        ("retry", _retry_task), 
+        ("cleanup", _cleanup_task),
+        ("writer", _write_task)  # 🔧 [NEW] 后台写入任务
+    ]
+    
+    for task_name, task in tasks_to_cancel:
         if task:
             task.cancel()
             try:
@@ -729,7 +823,9 @@ async def stop_polling():
     
     _polling_task = None
     _retry_task = None
-    _cleanup_task = None  # 🔧 重置清理任务句柄
+    _cleanup_task = None
+    _write_task = None  # 🔧 [NEW] 重置写入任务句柄
+    _write_queue = None  # 🔧 [NEW] 重置写入队列
     
     # 断开 PLC 长连接
     plc = get_plc_manager()

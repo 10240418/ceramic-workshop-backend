@@ -154,7 +154,8 @@ class MockDataGenerator:
         return struct.pack('>H', temp_int & 0xFFFF)
     
     def generate_electricity_meter(self, power_base: float, energy_base: float, 
-                                   energy_key: str = None, energy_index: int = 0) -> bytes:
+                                   energy_key: str = None, energy_index: int = 0,
+                                   ratio: int = 20) -> bytes:
         """生成电表模块数据 (56字节)
         
         结构 (14个Real):
@@ -163,13 +164,19 @@ class MockDataGenerator:
         - I_0~2 (3个Real, 12B) - 电流
         - Pt, Pa, Pb, Pc (4个Real, 16B) - 功率
         - ImpEp (Real, 4B) - 电能
+        
+        Args:
+            ratio: 电流/功率变比 (用于反向计算原始值)
+                   - 辊道窑: 60
+                   - 其他: 20
         """
         # 电压 (工业三相380V)
         uab_base = 380.0
         ua_base = 220.0
         
-        uab = [self._add_noise(uab_base, 0.02) for _ in range(3)]
-        ua = [self._add_noise(ua_base, 0.02) for _ in range(3)]
+        # 反向缩放电压: Real = Raw * 0.1  =>  Raw = Real * 10
+        uab = [self._add_noise(uab_base, 0.02) * 10 for _ in range(3)]
+        ua = [self._add_noise(ua_base, 0.02) * 10 for _ in range(3)]
         
         # 电流 (根据功率计算)
         power = self._add_sine_wave(power_base, amplitude=0.1, period=45)
@@ -177,21 +184,27 @@ class MockDataGenerator:
         
         # I = P / (√3 * U * cosφ), cosφ ≈ 0.85
         i_base = power * 1000 / (1.732 * 380 * 0.85)
-        current = [self._add_noise(i_base, 0.05) for _ in range(3)]
         
-        # 功率分配
-        pt = power
-        pa = power * 0.35
-        pb = power * 0.33
-        pc = power * 0.32
+        # 电流反向缩放: Real = Raw * 0.1 * Ratio  =>  Raw = Real * 10 / Ratio
+        i_scale = 10.0 / ratio
+        current = [self._add_noise(i_base, 0.05) * i_scale for _ in range(3)]
+        
+        # 功率分配 (反向缩放)
+        pt_raw = power * i_scale
+        pa_raw = (power * 0.35) * i_scale
+        pb_raw = (power * 0.33) * i_scale
+        pc_raw = (power * 0.32) * i_scale
         
         # 累计电能 (递增)
         if energy_key and energy_key in self._energy_accumulator:
             # 每4秒增加 power * (4/3600) kWh
             self._energy_accumulator[energy_key][energy_index] += power * (4 / 3600)
-            imp_ep = energy_base + self._energy_accumulator[energy_key][energy_index]
+            energy_real = energy_base + self._energy_accumulator[energy_key][energy_index]
         else:
-            imp_ep = energy_base + self._tick * power * (4 / 3600)
+            energy_real = energy_base + self._tick * power * (4 / 3600)
+        
+        # 电能反向缩放
+        imp_ep_raw = energy_real * i_scale
         
         # 打包数据 (大端序 Real)
         data = b''
@@ -201,11 +214,11 @@ class MockDataGenerator:
             data += struct.pack('>f', v)
         for v in current:
             data += struct.pack('>f', v)
-        data += struct.pack('>f', pt)
-        data += struct.pack('>f', pa)
-        data += struct.pack('>f', pb)
-        data += struct.pack('>f', pc)
-        data += struct.pack('>f', imp_ep)
+        data += struct.pack('>f', pt_raw)
+        data += struct.pack('>f', pa_raw)
+        data += struct.pack('>f', pb_raw)
+        data += struct.pack('>f', pc_raw)
+        data += struct.pack('>f', imp_ep_raw)
         
         return data
     
@@ -274,14 +287,15 @@ class MockDataGenerator:
         # 主电表 (12-67)
         total_power = sum(self._base_values['roller_power'])
         total_energy = sum(self._base_values['roller_energy'])
-        data += self.generate_electricity_meter(total_power, total_energy)
+        data += self.generate_electricity_meter(total_power, total_energy, ratio=60)
         
         # 5个分区电表 (68-347, zone1-zone5)
         for i in range(5):
             data += self.generate_electricity_meter(
                 self._base_values['roller_power'][i],
                 self._base_values['roller_energy'][i],
-                'roller', i
+                'roller', i,
+                ratio=60
             )
         
         return data

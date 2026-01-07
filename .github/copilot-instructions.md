@@ -360,3 +360,4 @@ cd D:\moliaochejian\Release
 中文回答我.
 命令行使用 python3 main.py 启动服务。
 你的命令行每次都需要在新的窗口执行命令,如果我已经运行了 python main.py 的话.
+我的命令行使用 powershell.

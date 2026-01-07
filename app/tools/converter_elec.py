@@ -3,7 +3,7 @@
 # ============================================================
 # 实时数据字段: Pt, ImpEp, Ua_0, I_0, I_1, I_2 (7个字段，用于API返回)
 # 存储字段: Pt, ImpEp, Ua_0 (3个字段，不存储三相电流)
-# 电流变比: 辊道窑=60, 其余=20
+# 电流/功率/能耗变比: 辊道窑=60, 其余(料仓/SCR/风机)=20
 # ============================================================
 
 from typing import Dict, Any
@@ -35,10 +35,11 @@ class ElectricityConverter(BaseConverter):
         - ImpEp: 正向有功电能 (kWh)
         - Ua_0: A相电压 (V)
     
-    电流变比说明:
-        PLC读取的是电流互感器二次侧数据，需要乘以变比得到一次侧实际电流
+    电流/功率/能耗变比说明:
+        PLC读取的是电流互感器二次侧数据，需要乘以变比得到一次侧实际值
         - 辊道窑 (roller_kiln): 变比 = 60
         - 其余设备 (hopper, scr, fan): 变比 = 20
+        - 需要乘变比的字段: Pt(功率), ImpEp(能耗), I_0/I_1/I_2(电流)
     """
     
     MODULE_TYPE = "ElectricityMeter"
@@ -89,11 +90,11 @@ class ElectricityConverter(BaseConverter):
                                    self.CURRENT_RATIO_ROLLER if is_roller_kiln else self.CURRENT_RATIO_DEFAULT)
         
         return {
-            # 功率和电能 (除以10)
-            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * scale, 2),
-            "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * scale, 2),
+            # 功率和电能 (除以10后乘变比)
+            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * scale * current_ratio, 2),
+            "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * scale * current_ratio, 2),
             
-            # A相电压 (除以10)
+            # A相电压 (除以10，不乘变比)
             "Ua_0": round(self.get_field_value(raw_data, "Ua_0", 0.0) * scale, 1),
             
             # 三相电流 (除以10后乘变比) - 用于实时显示
@@ -110,18 +111,25 @@ class ElectricityConverter(BaseConverter):
             raw_data: Parser 解析后的原始数据
             **kwargs:
                 - scale: 缩放系数 (默认 0.1，即除以10)
+                - current_ratio: 电流变比 (默认 20，辊道窑用 60)
+                - is_roller_kiln: 是否是辊道窑设备 (默认 False)
         
         Returns:
             存储字段字典 (3个字段，不含三相电流)
         """
         scale = kwargs.get('scale', self.DEFAULT_SCALE)
         
+        # 判断电流变比
+        is_roller_kiln = kwargs.get('is_roller_kiln', False)
+        current_ratio = kwargs.get('current_ratio', 
+                                   self.CURRENT_RATIO_ROLLER if is_roller_kiln else self.CURRENT_RATIO_DEFAULT)
+        
         return {
-            # 功率和电能 (除以10)
-            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * scale, 2),
-            "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * scale, 2),
+            # 功率和电能 (除以10后乘变比)
+            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * scale * current_ratio, 2),
+            "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * scale * current_ratio, 2),
             
-            # A相电压 (除以10)
+            # A相电压 (除以10，不乘变比)
             "Ua_0": round(self.get_field_value(raw_data, "Ua_0", 0.0) * scale, 1),
         }
 

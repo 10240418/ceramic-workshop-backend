@@ -108,4 +108,13 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8080, reload=False)
+    # 🔧 [FIX] 优化的 Uvicorn 配置 - 解决连接断开问题，同时保持容器稳定
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8080,
+        timeout_keep_alive=75,  # 关键修复：防止长连接过早断开
+        proxy_headers=True,     # 🔧 Docker 环境必需：正确处理反向代理头
+        forwarded_allow_ips="*",# 🔧 信任 Docker 网关 IP
+        log_level="info"
+    )

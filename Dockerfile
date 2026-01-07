@@ -19,9 +19,8 @@ COPY . .
 # 暴露端口
 EXPOSE 8080
 
-# 健康检查 - 每30秒检查一次API健康状态
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')" || exit 1
+# 健康检查 - 由 docker-compose.yml 管理，这里不再配置
+# HEALTHCHECK 配置已移至 docker-compose.yml
 
 # 启动应用
 CMD ["python", "main.py"]
