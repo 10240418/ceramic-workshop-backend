@@ -596,9 +596,10 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
                 # 更新历史缓存
                 _weight_history[cache_key] = fields.get('weight', 0.0)
             elif module_type == 'ElectricityMeter':
-                # 电表模块：实时缓存包含三相电流（用于API返回）
+                # 🔧 电表模块：实时缓存包含三相电流（用于API返回）
                 is_roller_kiln = device_type == 'roller_kiln'
-                fields = converter.convert(raw_fields, is_roller_kiln=is_roller_kiln)
+                is_scr = device_type == 'scr'  # 🔧 检测是否为SCR设备（氨水泵）
+                fields = converter.convert(raw_fields, is_roller_kiln=is_roller_kiln, is_scr=is_scr)
             else:
                 fields = converter.convert(raw_fields)
         else:
@@ -695,9 +696,10 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
                 # 更新历史缓存
                 _weight_history[cache_key] = fields.get('weight', 0.0)
             elif module_type == 'ElectricityMeter':
-                # 电表模块：写入数据库时不存储三相电流
+                # 🔧 电表模块：写入数据库时不存储三相电流
                 is_roller_kiln = device_type == 'roller_kiln'
-                fields = converter.convert_for_storage(raw_fields, is_roller_kiln=is_roller_kiln)
+                is_scr = device_type == 'scr'  # 🔧 检测是否为SCR设备
+                fields = converter.convert_for_storage(raw_fields, is_roller_kiln=is_roller_kiln, is_scr=is_scr)
             else:
                 fields = converter.convert(raw_fields)
         else:

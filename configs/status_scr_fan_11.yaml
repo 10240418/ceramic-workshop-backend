@@ -43,7 +43,7 @@ scr_status:
         offset: 4
         size: 4
         tag: "electricity_meter"
-        description: "电表状态"
+        description: "氨泵1电表状态 (表63)"
       - module_type: "ModuleStatus"
         offset: 8
         size: 4
@@ -65,7 +65,7 @@ scr_status:
         offset: 16
         size: 4
         tag: "electricity_meter"
-        description: "电表状态"
+        description: "氨泵2电表状态 (表66)"
       - module_type: "ModuleStatus"
         offset: 20
         size: 4
@@ -88,7 +88,7 @@ fan_status:
         offset: 24
         size: 4
         tag: "electricity_meter"
-        description: "电表状态"
+        description: "风机1电表状态 (表64)"
       - module_type: "ModuleStatus"
         offset: 28
         size: 4
@@ -105,7 +105,7 @@ fan_status:
         offset: 32
         size: 4
         tag: "electricity_meter"
-        description: "电表状态"
+        description: "风机2电表状态 (表65)"
       - module_type: "ModuleStatus"
         offset: 36
         size: 4
@@ -113,20 +113,21 @@ fan_status:
         description: "电能电表状态"
 
 # ============================================================
-# DB块布局总结
+# DB11 布局总结 (状态位按物理位置，数据映射按逻辑设备)
 # ============================================================
 # SCR:
 #   Offset 0-3:   SCR_1 FlowMeter 状态 (4 bytes)
-#   Offset 4-7:   SCR_1 ElectricityMeter 状态 (4 bytes)
-#   Offset 8-11:  SCR_1 ElectricityMeter_ImpEp 状态 (4 bytes)
+#   Offset 4-7:   SCR_1 氨泵1电表 状态 (表63) (4 bytes)
+#   Offset 8-11:  SCR_1 氨泵1电表 电能状态 (4 bytes)
 #   Offset 12-15: SCR_2 FlowMeter 状态 (4 bytes)
-#   Offset 16-19: SCR_2 ElectricityMeter 状态 (4 bytes)
-#   Offset 20-23: SCR_2 ElectricityMeter_ImpEp 状态 (4 bytes)
+#   Offset 16-19: SCR_2 氨泵2电表 状态 (表66) (4 bytes) [数据在DB10:188]
+#   Offset 20-23: SCR_2 氨泵2电表 电能状态 (4 bytes)
 # FAN:
-#   Offset 24-27: FAN_1 ElectricityMeter 状态 (4 bytes)
-#   Offset 28-31: FAN_1 ElectricityMeter_ImpEp 状态 (4 bytes)
-#   Offset 32-35: FAN_2 ElectricityMeter 状态 (4 bytes)
-#   Offset 36-39: FAN_2 ElectricityMeter_ImpEp 状态 (4 bytes)
+#   Offset 24-27: FAN_1 风机1电表 状态 (表64) (4 bytes) [数据在DB10:76]
+#   Offset 28-31: FAN_1 风机1电表 电能状态 (4 bytes)
+#   Offset 32-35: FAN_2 风机2电表 状态 (表65) (4 bytes) [数据在DB10:132]
+#   Offset 36-39: FAN_2 风机2电表 电能状态 (4 bytes)
 # ============================================================
 # 总计: 2×12 + 2×8 = 24 + 16 = 40 bytes
+# 注意: scr = 氨泵, fan = 风机 (按逻辑设备分组)
 # ============================================================

@@ -61,33 +61,6 @@ kiln_have:
   - device_id: "status_kiln_have_2"
     device_name: "2号短料仓状态(有称重)"
     device_type: "kiln_have"
-    start_offset: 16
-    total_size: 16
-    modules:
-      - module_type: "ModuleStatus"
-        offset: 16
-        size: 4
-        tag: "weigh_sensor"
-        description: "称重传感器状态"
-      - module_type: "ModuleStatus"
-        offset: 20
-        size: 4
-        tag: "temperature"
-        description: "温度传感器状态"
-      - module_type: "ModuleStatus"
-        offset: 24
-        size: 4
-        tag: "electricity_meter"
-        description: "电表状态"
-      - module_type: "ModuleStatus"
-        offset: 28
-        size: 4
-        tag: "electricity_meter_i"
-        description: "电流电表状态"
-
-  - device_id: "status_kiln_have_3"
-    device_name: "3号短料仓状态(有称重)"
-    device_type: "kiln_have"
     start_offset: 32
     total_size: 16
     modules:
@@ -108,6 +81,33 @@ kiln_have:
         description: "电表状态"
       - module_type: "ModuleStatus"
         offset: 44
+        size: 4
+        tag: "electricity_meter_i"
+        description: "电流电表状态"
+
+  - device_id: "status_kiln_have_3"
+    device_name: "3号短料仓状态(有称重)"
+    device_type: "kiln_have"
+    start_offset: 16
+    total_size: 16
+    modules:
+      - module_type: "ModuleStatus"
+        offset: 16
+        size: 4
+        tag: "weigh_sensor"
+        description: "称重传感器状态"
+      - module_type: "ModuleStatus"
+        offset: 20
+        size: 4
+        tag: "temperature"
+        description: "温度传感器状态"
+      - module_type: "ModuleStatus"
+        offset: 24
+        size: 4
+        tag: "electricity_meter"
+        description: "电表状态"
+      - module_type: "ModuleStatus"
+        offset: 28
         size: 4
         tag: "electricity_meter_i"
         description: "电流电表状态"
@@ -292,17 +292,17 @@ long_kiln_have:
         description: "电流电表状态"
 
 # ============================================================
-# DB块布局总结
+# DB块布局总结 (按逻辑设备映射)
 # ============================================================
-# Offset 0-15:    Kiln_Have_1 (16 bytes)
-# Offset 16-31:   Kiln_Have_2 (16 bytes)
-# Offset 32-47:   Kiln_Have_3 (16 bytes)
-# Offset 48-63:   Kiln_Have_4 (16 bytes)
-# Offset 64-75:   Kiln_NoHave_1 (12 bytes)
-# Offset 76-87:   Kiln_NoHave_2 (12 bytes)
-# Offset 88-107:  LongKiln_Have_1 (20 bytes)
-# Offset 108-127: LongKiln_Have_2 (20 bytes)
-# Offset 128-147: LongKiln_Have_3 (20 bytes)
+# Offset 0-15:    Kiln_Have_1 (16 bytes) - UI 7号窑
+# Offset 16-31:   Kiln_Have_3 (16 bytes) - UI 5号窑 (与2号互换)
+# Offset 32-47:   Kiln_Have_2 (16 bytes) - UI 6号窑 (与3号互换)
+# Offset 48-63:   Kiln_Have_4 (16 bytes) - UI 4号窑
+# Offset 64-75:   Kiln_NoHave_1 (12 bytes) - UI 2号窑
+# Offset 76-87:   Kiln_NoHave_2 (12 bytes) - UI 1号窑
+# Offset 88-107:  LongKiln_Have_1 (20 bytes) - UI 8号窑
+# Offset 108-127: LongKiln_Have_2 (20 bytes) - UI 3号窑
+# Offset 128-147: LongKiln_Have_3 (20 bytes) - UI 9号窑
 # ============================================================
 # 总计: 4×16 + 2×12 + 3×20 = 64 + 24 + 60 = 148 bytes
 # ============================================================

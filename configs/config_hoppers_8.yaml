@@ -47,25 +47,6 @@ short_hoppers:
   - device_id: "short_hopper_2"
     device_name: "2号短料仓"
     device_type: "short_hopper"
-    start_offset: 72
-    total_size: 72
-    modules:
-      - module_type: "WeighSensor"
-        offset: 72
-        size: 14
-        tag: "weight"
-      - module_type: "TemperatureSensor"
-        offset: 86
-        size: 2
-        tag: "temp"
-      - module_type: "ElectricityMeter"
-        offset: 88
-        size: 56
-        tag: "meter"
-  
-  - device_id: "short_hopper_3"
-    device_name: "3号短料仓"
-    device_type: "short_hopper"
     start_offset: 144
     total_size: 72
     modules:
@@ -79,6 +60,25 @@ short_hoppers:
         tag: "temp"
       - module_type: "ElectricityMeter"
         offset: 160
+        size: 56
+        tag: "meter"
+  
+  - device_id: "short_hopper_3"
+    device_name: "3号短料仓"
+    device_type: "short_hopper"
+    start_offset: 72
+    total_size: 72
+    modules:
+      - module_type: "WeighSensor"
+        offset: 72
+        size: 14
+        tag: "weight"
+      - module_type: "TemperatureSensor"
+        offset: 86
+        size: 2
+        tag: "temp"
+      - module_type: "ElectricityMeter"
+        offset: 88
         size: 56
         tag: "meter"
   
@@ -213,19 +213,19 @@ long_hoppers:
         tag: "meter"
 
 # ============================================================
-# DB6 偏移量汇总表
+# DB8 偏移量汇总表 (按逻辑设备映射)
 # ============================================================
-# 设备           | 起始偏移 | 结束偏移 | 大小
-# ---------------|----------|----------|------
-# short_hopper_1 | 0        | 71       | 72
-# short_hopper_2 | 72       | 143      | 72
-# short_hopper_3 | 144      | 215      | 72
-# short_hopper_4 | 216      | 287      | 72
-# no_hopper_1    | 288      | 345      | 58
-# no_hopper_2    | 346      | 403      | 58
-# long_hopper_1  | 404      | 477      | 74
-# long_hopper_2  | 478      | 551      | 74
-# long_hopper_3  | 552      | 625      | 74
-# ---------------|----------|----------|------
-# 总计           | 0        | 625      | 626
+# 设备           | 起始偏移 | 结束偏移 | 大小 | 说明
+# ---------------|----------|----------|------|------
+# short_hopper_1 | 0        | 71       | 72   | UI 7号窑
+# short_hopper_3 | 72       | 143      | 72   | UI 5号窑 (与2号互换)
+# short_hopper_2 | 144      | 215      | 72   | UI 6号窑 (与3号互换)
+# short_hopper_4 | 216      | 287      | 72   | UI 4号窑
+# no_hopper_1    | 288      | 345      | 58   | UI 2号窑
+# no_hopper_2    | 346      | 403      | 58   | UI 1号窑
+# long_hopper_1  | 404      | 477      | 74   | UI 8号窑
+# long_hopper_2  | 478      | 551      | 74   | UI 3号窑
+# long_hopper_3  | 552      | 625      | 74   | UI 9号窑
+# ---------------|----------|----------|------|------
+# 总计           | 0        | 625      | 626  |
 # ============================================================

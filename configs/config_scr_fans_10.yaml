@@ -40,13 +40,13 @@ scr_devices:
         offset: 10
         size: 56
         tag: "meter"
-        description: "电表"
+        description: "氨泵1电表 (表63)"
   
   - device_id: "scr_2"
     device_name: "2号SCR"
     device_type: "scr"
     start_offset: 66
-    total_size: 66
+    total_size: 178  # 66-244 (gas_meter@66 + meter@188)
     modules:
       - module_type: "FlowMeter"
         offset: 66
@@ -54,10 +54,10 @@ scr_devices:
         tag: "gas_meter"
         description: "燃气表"
       - module_type: "ElectricityMeter"
-        offset: 76
+        offset: 188
         size: 56
         tag: "meter"
-        description: "电表"
+        description: "氨泵2电表 (表66)"
 
 # ============================================================
 # 风机 (2个) - 每个56字节
@@ -68,6 +68,18 @@ fans:
   - device_id: "fan_1"
     device_name: "1号风机"
     device_type: "fan"
+    start_offset: 76
+    total_size: 56
+    modules:
+      - module_type: "ElectricityMeter"
+        offset: 76
+        size: 56
+        tag: "meter"
+        description: "风机1电表 (表64)"
+  
+  - device_id: "fan_2"
+    device_name: "2号风机"
+    device_type: "fan"
     start_offset: 132
     total_size: 56
     modules:
@@ -75,31 +87,21 @@ fans:
         offset: 132
         size: 56
         tag: "meter"
-        description: "风机电表"
-  
-  - device_id: "fan_2"
-    device_name: "2号风机"
-    device_type: "fan"
-    start_offset: 188
-    total_size: 56
-    modules:
-      - module_type: "ElectricityMeter"
-        offset: 188
-        size: 56
-        tag: "meter"
-        description: "风机电表"
+        description: "风机2电表 (表65)"
 
 # ============================================================
-# DB8 偏移量汇总表
+# DB10 偏移量汇总表 (按逻辑设备映射)
 # ============================================================
 # 设备    | 模块       | 偏移量  | 大小  | 说明
 # --------|------------|---------|-------|--------
 # scr_1   | gas_meter  | 0       | 10    | 1号SCR燃气表
-# scr_1   | meter      | 10      | 56    | 1号SCR电表
+# scr_1   | meter      | 10      | 56    | 氨泵1电表 (表63)
 # scr_2   | gas_meter  | 66      | 10    | 2号SCR燃气表
-# scr_2   | meter      | 76      | 56    | 2号SCR电表
-# fan_1   | meter      | 132     | 56    | 1号风机电表
-# fan_2   | meter      | 188     | 56    | 2号风机电表
+# fan_1   | meter      | 76      | 56    | 风机1电表 (表64)
+# fan_2   | meter      | 132     | 56    | 风机2电表 (表65)
+# scr_2   | meter      | 188     | 56    | 氨泵2电表 (表66)
 # --------|------------|---------|-------|--------
 # 总计    |            | 0-243   | 244   |
+# ============================================================
+# 注意: scr = 氨泵, fan = 风机 (按逻辑设备分组，非物理位置)
 # ============================================================
