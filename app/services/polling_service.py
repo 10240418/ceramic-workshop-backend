@@ -13,9 +13,9 @@
 import asyncio
 import yaml
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List, Tuple
-from collections import deque
+from collections import deque, defaultdict
 
 from config import get_settings
 from app.core.timezone_utils import now_beijing, beijing_isoformat
@@ -48,7 +48,9 @@ _db_mappings: List[Dict[str, Any]] = []
 _device_status_db_configs: List[Dict[str, Any]] = []
 
 # 历史重量缓存 (用于计算下料速度)
-_weight_history: Dict[str, float] = {}
+# key: "device_id:module_tag"
+# value: deque([w_t-60s, ..., w_t-5s], maxlen=12)
+_weight_queues: Dict[str, deque] = defaultdict(lambda: deque(maxlen=12))
 
 # ============================================================
 # 最新数据缓存 (供 API 直接读取，避免查询数据库)
@@ -379,7 +381,7 @@ async def _periodic_cleanup():
             import gc
             gc.collect()  # 强制垃圾回收
             
-            print(f"🧹 定期清理完成 | 设备缓存: {len(_latest_data)} | 重量历史: {len(_weight_history)}")
+            print(f"🧹 定期清理完成 | 设备缓存: {len(_latest_data)} | 重量历史(Rows): {len(_weight_queues)}")
         except Exception as e:
             print(f"⚠️ 定期清理任务异常: {e}")
 
@@ -566,7 +568,7 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
         db_number: DB块号
         timestamp: 时间戳
     """
-    global _latest_data, _weight_history
+    global _latest_data, _weight_queues
     
     device_id = device_data['device_id']
     device_type = device_data['device_type']
@@ -584,17 +586,49 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
             
             # 称重模块需要传入历史数据
             if module_type == 'WeighSensor':
-                cache_key = f"{device_id}:{module_tag}"
-                previous_weight = _weight_history.get(cache_key)
+                previous_weight = None
+                poll_interval = 5.0 # 默认间隔
                 
+                # 只有有料仓的设备才查数据库（优化：过滤 no_hopper）
+                should_query_db = "no_hopper" not in device_id
+                
+                try:
+                    if should_query_db:
+                        from app.services.history_query_service import HistoryQueryService
+                        # 1. 优先策略：从数据库查询30分钟前的重量数据
+                        # 计算公式：(前值 - 当前值) / 时间间隔(30m)
+                        target_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+                        hqs = HistoryQueryService()
+                        
+                        hist_weight = hqs.query_weight_at_timestamp(device_id, target_time)
+                        
+                        if hist_weight is not None:
+                            previous_weight = hist_weight
+                            poll_interval = 1800.0 # 30分钟
+                except Exception:
+                    pass # 数据库查询失败，静默降级
+                
+                # 2. 降级备用策略：如果数据库没查到，或者是不需要查库的设备
+                if previous_weight is None:
+                    cache_key = f"{device_id}:{module_tag}"
+                    q = _weight_queues[cache_key]
+                    if len(q) > 0:
+                        # 取队列最老的数据 (Index 0)
+                        # 如果队列满(12个)，则是 12*5 = 60秒前的数据
+                        previous_weight = q[0]
+                        poll_interval = len(q) * settings.plc_poll_interval
+
+                # 执行转换
                 fields = converter.convert(
                     raw_fields,
                     previous_weight=previous_weight,
-                    interval=settings.plc_poll_interval
+                    interval=poll_interval
                 )
                 
-                # 更新历史缓存
-                _weight_history[cache_key] = fields.get('weight', 0.0)
+                # 更新本地短时历史队列
+                # 将当前计算出的重量存入队列末尾
+                cache_key = f"{device_id}:{module_tag}"
+                _weight_queues[cache_key].append(fields.get('weight', 0.0))
             elif module_type == 'ElectricityMeter':
                 # 🔧 电表模块：实时缓存包含三相电流（用于API返回）
                 is_roller_kiln = device_type == 'roller_kiln'
@@ -667,7 +701,7 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
     Returns:
         添加的数据点数量
     """
-    global _weight_history
+    global _weight_queues
     
     device_id = device_data['device_id']
     device_type = device_data['device_type']
@@ -684,17 +718,43 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
             
             # 称重模块需要传入历史数据
             if module_type == 'WeighSensor':
-                cache_key = f"{device_id}:{module_tag}"
-                previous_weight = _weight_history.get(cache_key)
+                previous_weight = None
+                poll_interval = 5.0 # 默认
                 
+                # 优化：过滤 no_hopper
+                should_query_db = "no_hopper" not in device_id
+                
+                try:
+                    if should_query_db:
+                        from app.services.history_query_service import HistoryQueryService
+                        target_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+                        hqs = HistoryQueryService()
+                        
+                        hist_weight = hqs.query_weight_at_timestamp(device_id, target_time)
+                        
+                        if hist_weight is not None:
+                            previous_weight = hist_weight
+                            poll_interval = 1800.0
+                except Exception:
+                    pass
+
+                # 降级备用策略
+                if previous_weight is None:
+                    cache_key = f"{device_id}:{module_tag}"
+                    q = _weight_queues[cache_key]
+                    if len(q) > 0:
+                        previous_weight = q[0]
+                        poll_interval = len(q) * settings.plc_poll_interval
+
+                # 执行转换
                 fields = converter.convert(
                     raw_fields,
                     previous_weight=previous_weight,
-                    interval=settings.plc_poll_interval
+                    interval=poll_interval
                 )
                 
-                # 更新历史缓存
-                _weight_history[cache_key] = fields.get('weight', 0.0)
+                # 注意：此处不再次更新 _weight_queues，
+                # 避免在一个周期内重复追加数据（_update_latest_data 已负责更新）
             elif module_type == 'ElectricityMeter':
                 # 🔧 电表模块：写入数据库时不存储三相电流
                 is_roller_kiln = device_type == 'roller_kiln'

@@ -82,6 +82,52 @@ class HistoryQueryService:
             return None
     
     # ------------------------------------------------------------
+    # 0.1 query_weight_at_timestamp() - 查询指定时间的重量
+    # ------------------------------------------------------------
+    def query_weight_at_timestamp(self, device_id: str, target_time: datetime, window_seconds: int = 60) -> Optional[float]:
+        """查询指定时间点附近的重量数据
+        
+        Args:
+            device_id: 设备ID
+            target_time: 目标时间
+            window_seconds: 搜索窗口大小（秒），默认前后30秒
+            
+        Returns:
+            查询到的重量值，如果没有则返回None
+        """
+        # 计算查询时间范围 [target - window, target + window]
+        start_time = target_time - timedelta(seconds=window_seconds)
+        end_time = target_time + timedelta(seconds=window_seconds)
+        
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            |> filter(fn: (r) => r["_field"] == "weight")
+            |> filter(fn: (r) => r["module_type"] == "WeighSensor")
+            |> first()
+            |> yield(name: "weight")
+        '''
+        
+        try:
+            result = self.query_api.query(query)
+            
+            # 解析结果
+            for table in result:
+                for record in table.records:
+                    # 返回第一个匹配的值
+                    val = record.get_value()
+                    if val is not None:
+                        return float(val)
+            
+            return None
+        except Exception as e:
+            # 静默失败，避免刷屏日志
+            # print(f"⚠️  查询历史重量失败: {str(e)}")
+            return None
+
+    # ------------------------------------------------------------
     # 1. query_device_list() - 查询设备列表
     # ------------------------------------------------------------
     def query_device_list(self, device_type: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -352,6 +398,73 @@ class HistoryQueryService:
         module_tag: Optional[str] = None,
         interval: str = "1m"
     ) -> List[Dict[str, Any]]:
+        """查询设备功率历史数据（便捷方法）"""
+        return self.query_device_history(
+            device_id=device_id,
+            start=start,
+            end=end,
+            module_type="ElectricityMeter",
+            module_tag=module_tag,
+            fields=["Pt", "ImpEp"],
+            interval=interval
+        )
+
+    # ------------------------------------------------------------
+    # 6. query_feeding_history() - 查询投料记录
+    # ------------------------------------------------------------
+    def query_feeding_history(
+        self,
+        device_id: str,
+        start: datetime,
+        end: datetime,
+        limit: int = 5000
+    ) -> List[Dict[str, Any]]:
+        """查询自动投料分析记录
+        
+        Args:
+           device_id: 设备ID
+           start: 开始时间 (Naive Beijing Time or Aware)
+           end: 结束时间
+           limit: 返回记录数限制
+        
+        Returns:
+            [{ "time": "...", "added_weight": 10.5, "device_id": "..." }, ...]
+        """
+        # 统一时区处理逻辑 (参考 query_device_history)
+        def to_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=BEIJING_TZ)
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        
+        start_utc = to_utc(start)
+        end_utc = to_utc(end)
+
+        # 构造 Flux 查询 (倒序取最新)
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {start_utc.isoformat()}Z, stop: {end_utc.isoformat()}Z)
+            |> filter(fn: (r) => r["_measurement"] == "feeding_records")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            |> filter(fn: (r) => r["_field"] == "added_weight")
+            |> sort(columns: ["_time"], desc: true)
+            |> limit(n: {limit})
+        '''
+        
+        result = self.query_api.query(query)
+        records = []
+        for table in result:
+            for record in table.records:
+                records.append({
+                    "time": to_beijing(record.get_time()).isoformat(), # 转回北京时间方便前端
+                    "added_weight": record.get_value(),
+                    "device_id": device_id
+                })
+        
+        # [CRITICAL] 按时间升序排列 (Oldest -> Newest)
+        # 前端绘制曲线时需要时间按照顺序，否则会出现回勾
+        records.sort(key=lambda x: x["time"])
+        
+        return records
         """查询设备功率历史数据（便捷方法）"""
         return self.query_device_history(
             device_id=device_id,

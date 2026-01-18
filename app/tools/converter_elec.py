@@ -36,7 +36,7 @@ class ElectricityConverter(BaseConverter):
     电流互感器变比:
         - 辊道窑 (roller_kiln): ratio = 60
         - 料仓/风机 (hopper/fan): ratio = 20
-        - SCR氨水泵 (scr): ratio = 2
+        - SCR氨水泵 (scr): ratio = 20
     """
     
     MODULE_TYPE = "ElectricityMeter"

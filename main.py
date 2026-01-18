@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import health, config, hopper, roller, scr_fan, devices, status
 from app.services.polling_service import start_polling, stop_polling
+from app.services.feeding_analysis_service import feeding_service
 from config import get_settings
 
 settings = get_settings()
@@ -48,6 +49,9 @@ async def lifespan(app: FastAPI):
     if settings.enable_polling:
         await start_polling()
         print("✅ 轮询服务已启动")
+        
+        # 5. 启动自动投料分析服务 (6小时执行)
+        feeding_service.start()
     else:
         print("ℹ️  轮询服务已禁用 (ENABLE_POLLING=false)")
         print("   数据将由外部mock服务提供")
@@ -56,6 +60,7 @@ async def lifespan(app: FastAPI):
     
     # 关闭时
     print("🛑 应用关闭中...")
+    feeding_service.stop()
     if settings.enable_polling:
         await stop_polling()
     
