@@ -123,10 +123,17 @@ class MockDataGenerator:
         - RtFlow (DWord, 4B) - 实时流量 L/min
         - TotalFlow (DWord, 4B) - 累计流量 m³
         - TotalFlowMilli (Word, 2B) - 累计流量小数 mL
+        
+        注意: PLC存储的是原始值，转换公式：Real = Raw * 0.01
+        所以: Raw = Real / 0.01 = Real * 100
         """
         base_flow = self._base_values['scr_flow'][device_index]
         rt_flow = self._add_noise(base_flow, 0.1)
         rt_flow = max(0, rt_flow + random.uniform(-5, 5))
+        
+        # 🔧 [FIX] 流量反向计算: 真实值 / 0.01 = 真实值 * 100
+        # 例如: 85.5 L/min -> 8550
+        rt_flow_raw = int(rt_flow / 0.01)
         
         # 累计流量递增
         total_flow_base = 5000 + device_index * 1000
@@ -134,9 +141,9 @@ class MockDataGenerator:
         total_flow_int = int(total_flow)
         total_flow_milli = int((total_flow - total_flow_int) * 1000)
         
-        data = struct.pack('>I', int(rt_flow * 100))  # RtFlow (放大100倍存储)
-        data += struct.pack('>I', total_flow_int)     # TotalFlow
-        data += struct.pack('>H', total_flow_milli)   # TotalFlowMilli
+        data = struct.pack('>I', rt_flow_raw)        # RtFlow (原始值)
+        data += struct.pack('>I', total_flow_int)    # TotalFlow
+        data += struct.pack('>H', total_flow_milli)  # TotalFlowMilli
         
         return data
     
@@ -144,14 +151,18 @@ class MockDataGenerator:
         """生成温度传感器模块数据 (2字节)
         
         结构:
-        - Temperature (Word, 2B) - 温度值 (放大10倍)
+        - Temperature (Word, 2B) - 温度值
+        
+        注意: PLC存储的是原始值，转换公式：Real = Raw * 0.1
+        所以: Raw = Real / 0.1 = Real * 10
         """
         temp = self._add_noise(temp_value, 0.02)
         temp = max(0, temp + random.uniform(-2, 2))
         
-        # 温度放大10倍存储 (如 82.5°C -> 825)
-        temp_int = int(temp * 10)
-        return struct.pack('>H', temp_int & 0xFFFF)
+        # 🔧 [FIX] 温度反向计算: 真实值 / 0.1
+        # 例如: 82.5°C -> 825
+        temp_raw = int(temp / 0.1)
+        return struct.pack('>H', temp_raw & 0xFFFF)
     
     def generate_electricity_meter(self, power_base: float, energy_base: float, 
                                    energy_key: str = None, energy_index: int = 0,
@@ -166,53 +177,59 @@ class MockDataGenerator:
         - ImpEp (Real, 4B) - 电能
         
         Args:
-            ratio: 电流/功率变比 (用于反向计算原始值)
+            ratio: 电流变比 (电流互感器变比)
                    - 辊道窑: 60
                    - 其他: 20
+        
+        注意: PLC存储的是原始值，需要通过转换器转换：
+        - 电压: Real = Raw * 0.1
+        - 电流: Real = Raw * 0.1 * Ratio
+        - 功率: Real = Raw * 0.1
+        - 电能: Real = Raw * 0.1
         """
-        # 电压 (工业三相380V)
-        uab_base = 380.0
-        ua_base = 220.0
+        # 🔧 [FIX] 生成真实的物理值，然后反向计算 PLC 原始值
         
-        # 反向缩放电压: Real = Raw * 0.1  =>  Raw = Real * 10
-        uab = [self._add_noise(uab_base, 0.02) * 10 for _ in range(3)]
-        ua = [self._add_noise(ua_base, 0.02) * 10 for _ in range(3)]
+        # 1. 电压 (工业三相380V) - PLC原始值 = 真实值 / 0.1
+        uab_real = [self._add_noise(380.0, 0.02) for _ in range(3)]
+        ua_real = [self._add_noise(220.0, 0.02) for _ in range(3)]
         
-        # 电流 (根据功率计算)
-        power = self._add_sine_wave(power_base, amplitude=0.1, period=45)
-        power = max(0.1, power + random.uniform(-2, 2))
+        uab_raw = [v / 0.1 for v in uab_real]  # 380V -> 3800
+        ua_raw = [v / 0.1 for v in ua_real]    # 220V -> 2200
         
+        # 2. 功率 (kW) - PLC原始值 = 真实值 / 0.1
+        power_real = self._add_sine_wave(power_base, amplitude=0.1, period=45)
+        power_real = max(0.1, power_real + random.uniform(-2, 2))
+        
+        pt_raw = power_real / 0.1              # 例如 18.5kW -> 185
+        pa_raw = (power_real * 0.35) / 0.1
+        pb_raw = (power_real * 0.33) / 0.1
+        pc_raw = (power_real * 0.32) / 0.1
+        
+        # 3. 电流 (A) - PLC原始值 = 真实值 / (0.1 * Ratio)
         # I = P / (√3 * U * cosφ), cosφ ≈ 0.85
-        i_base = power * 1000 / (1.732 * 380 * 0.85)
+        i_real = power_real * 1000 / (1.732 * 380 * 0.85)  # 真实电流 (A)
         
-        # 电流反向缩放: Real = Raw * 0.1 * Ratio  =>  Raw = Real * 10 / Ratio
-        i_scale = 10.0 / ratio
-        current = [self._add_noise(i_base, 0.05) * i_scale for _ in range(3)]
+        current_raw = [self._add_noise(i_real, 0.05) / (0.1 * ratio) for _ in range(3)]
+        # 例如: 辊道窑 100A -> 100 / (0.1 * 60) = 16.67
+        #      料仓 50A -> 50 / (0.1 * 20) = 25
         
-        # 功率分配 (反向缩放)
-        pt_raw = power * i_scale
-        pa_raw = (power * 0.35) * i_scale
-        pb_raw = (power * 0.33) * i_scale
-        pc_raw = (power * 0.32) * i_scale
-        
-        # 累计电能 (递增)
+        # 4. 累计电能 (kWh) - PLC原始值 = 真实值 / 0.1
         if energy_key and energy_key in self._energy_accumulator:
-            # 每4秒增加 power * (4/3600) kWh
-            self._energy_accumulator[energy_key][energy_index] += power * (4 / 3600)
+            # 每6秒增加 power * (6/3600) kWh
+            self._energy_accumulator[energy_key][energy_index] += power_real * (6 / 3600)
             energy_real = energy_base + self._energy_accumulator[energy_key][energy_index]
         else:
-            energy_real = energy_base + self._tick * power * (4 / 3600)
+            energy_real = energy_base + self._tick * power_real * (6 / 3600)
         
-        # 电能反向缩放
-        imp_ep_raw = energy_real * i_scale
+        imp_ep_raw = energy_real / 0.1  # 例如 1250.3kWh -> 12503
         
         # 打包数据 (大端序 Real)
         data = b''
-        for v in uab:
+        for v in uab_raw:
             data += struct.pack('>f', v)
-        for v in ua:
+        for v in ua_raw:
             data += struct.pack('>f', v)
-        for v in current:
+        for v in current_raw:
             data += struct.pack('>f', v)
         data += struct.pack('>f', pt_raw)
         data += struct.pack('>f', pa_raw)

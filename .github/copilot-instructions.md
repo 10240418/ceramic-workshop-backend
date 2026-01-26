@@ -11,7 +11,7 @@
 
 2.  **配置驱动 (Configuration Driven)**:
     - **db_mappings.yaml**: 核心映射表，定义 DB 块号、大小及对应的配置文件。
-    - **config_*.yaml**: 具体设备内存布局，引用 `plc_modules.yaml` 中的基础模块。
+    - **config\_\*.yaml**: 具体设备内存布局，引用 `plc_modules.yaml` 中的基础模块。
     - **原则**: 新增设备或调整偏移量时，优先修改 YAML 配置，尽量不修改代码。
 
 3.  **高可靠性轮询 (High Reliability Polling)**:
@@ -24,32 +24,32 @@
 ```mermaid
 graph TD
     PLC[S7-1200 PLC] -->|S7 Protocol| PollingService
-    
+
     subgraph PollingService
         direction TB
         Conn[PLC Manager (Singleton)]
-        
+
         subgraph Parsing
             P_Hopper[HopperParser (DB8)]
             P_Roller[RollerKilnParser (DB9)]
             P_SCR[SCRFanParser (DB10)]
         end
-        
+
         subgraph Logic
             Converter[Data Converter (Raw -> Physical)]
             Buffer[Batch Buffer]
             LocalCache[SQLite Cache (Fallback)]
         end
     end
-    
+
     PLC -->|DB8/9/10| P_Hopper & P_Roller & P_SCR
     P_Hopper & P_Roller & P_SCR --> Converter
     Converter --> Buffer
-    
+
     Buffer -->|Batch Write| InfluxDB[(InfluxDB)]
     Buffer -.->|Fail| LocalCache
     LocalCache -.->|Retry| InfluxDB
-    
+
     InfluxDB -->|Query| API[FastAPI Endpoints]
 ```
 
@@ -93,7 +93,7 @@ ceramic-workshop-backend/
 ### 4.1 数据解析与转换流程
 
 1.  **Parse (解析)**: `Parser` 类读取 `config_*.yaml` 中的偏移量，将 PLC `bytes` 解析为 Python 字典 (Raw Values)。
-    - *Tip*: Parser 不进行单位转换，只按 Byte/Word/Real 读取数值。
+    - _Tip_: Parser 不进行单位转换，只按 Byte/Word/Real 读取数值。
 2.  **Convert (转换)**: `Converter` 类将 Raw Values 转换为物理量 (Physical Values)。
     - 例: `ElectrocityMeterConverter` 将 14 个原始电表字段精简为 `Pt`, `Ua`, `Ia` 等 8 个核心字段。
     - 例: `WeightConverter` 结合历史数据计算 `feed_rate` (下料速度)。
@@ -113,10 +113,10 @@ ceramic-workshop-backend/
 
 - **Base URL**: `http://localhost:8080`
 - **Endpoints**:
-    - `GET /api/hopper/list`: 料仓列表 (含实时数据)。
-    - `GET /api/roller/realtime`: 辊道窑实时数据 (含各区温度/电表)。
-    - `GET /api/status/realtime`: 设备通信状态。
-    - `GET /api/health`: 系统健康检查 (InfluxDB连接状态, 队列长度)。
+  - `GET /api/hopper/list`: 料仓列表 (含实时数据)。
+  - `GET /api/roller/realtime`: 辊道窑实时数据 (含各区温度/电表)。
+  - `GET /api/status/realtime`: 设备通信状态。
+  - `GET /api/health`: 系统健康检查 (InfluxDB连接状态, 队列长度)。
 
 ## 6. 复用指南 (Replication Guide)
 
@@ -135,7 +135,9 @@ ceramic-workshop-backend/
 
 ---
 
-**AI 指令**: 
+**AI 指令**:
+
 1. 在修改代码时，优先检查 `configs/` 目录，通过配置驱动逻辑。
 2. 涉及 PLC 通信时，注意 S7-1200 的大端序 (`Big Endian`) 特性。
 3. 新增功能时，保持 "Controller-Service-Dao" (Router-Service-Core) 的分层结构。
+   对于我实现主题切换的时候,需要严格严谨实现,并且修改的文件需要检查是否有遗漏和错误.

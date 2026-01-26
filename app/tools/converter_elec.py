@@ -5,9 +5,10 @@
 # 存储字段: Pt, ImpEp, Ua_0 (3个字段，不存储三相电流)
 # 
 # 🔧 2026-01-10 更新计算公式 (根据实际PLC原始数据验证):
+# 🔧 2026-01-20 功率系数调整: 原 0.001 → 0.0001 (×0.1)
 #   - 电压 Ua: raw × 0.1 (不乘变比)
-#   - 电流 I:  raw × 0.001 × ratio (料仓/风机=20, 辊道窑=60, SCR=2)
-#   - 功率 Pt: raw × 0.001 × ratio
+#   - 电流 I:  raw × 0.001 × ratio (料仓/风机=20, 辊道窑=60, SCR=20)
+#   - 功率 Pt: raw × 0.0001 × ratio
 #   - 能耗 ImpEp: raw × 2 (不乘变比，直接乘2)
 # ============================================================
 
@@ -27,10 +28,10 @@ class ElectricityConverter(BaseConverter):
         - Pa, Pb, Pc: 各相功率 (不存储)
         - ImpEp: 正向有功电能
     
-    计算公式 (2026-01-10 验证):
+    计算公式 (2026-01-20 更新):
         - 电压: raw × 0.1 → 实际电压 (V)
         - 电流: raw × 0.001 × ratio → 实际电流 (A)
-        - 功率: raw × 0.001 × ratio → 实际功率 (kW)
+        - 功率: raw × 0.0001 × ratio → 实际功率 (kW)
         - 能耗: raw × 2 → 实际能耗 (kWh)
     
     电流互感器变比:
@@ -49,7 +50,7 @@ class ElectricityConverter(BaseConverter):
     # 缩放系数
     SCALE_VOLTAGE = 0.1           # 电压: raw × 0.1
     SCALE_CURRENT = 0.001         # 电流: raw × 0.001 × ratio
-    SCALE_POWER = 0.001           # 功率: raw × 0.001 × ratio
+    SCALE_POWER = 0.0001          # 功率: raw × 0.0001 × ratio (2026-01-20: 原0.001×0.1)
     SCALE_ENERGY = 2.0            # 能耗: raw × 2 (不乘变比)
     
     # 实时数据字段 (包含三相电流，用于API返回)
@@ -89,7 +90,7 @@ class ElectricityConverter(BaseConverter):
         计算公式:
             - 电压: raw × 0.1
             - 电流: raw × 0.001 × ratio
-            - 功率: raw × 0.001 × ratio
+            - 功率: raw × 0.0001 × ratio
             - 能耗: raw × 2
         """
         # 判断电流变比: 优先级 is_scr > is_roller_kiln > default
@@ -107,8 +108,8 @@ class ElectricityConverter(BaseConverter):
         current_ratio = kwargs.get('current_ratio', current_ratio)
         
         return {
-            # 功率: raw × 0.001 × ratio
-            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 2),
+            # 功率: raw × 0.0001 × ratio (保留3位小数)
+            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 3),
             
             # 能耗: raw × ratio (直接乘变比，不乘2)
             "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * current_ratio, 2),
@@ -151,8 +152,8 @@ class ElectricityConverter(BaseConverter):
         current_ratio = kwargs.get('current_ratio', current_ratio)
         
         return {
-            # 功率: raw × 0.001 × ratio
-            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 2),
+            # 功率: raw × 0.0001 × ratio (保留3位小数)
+            "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 3),
             
             # 能耗: raw × ratio (直接乘变比，不乘2)
             "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * current_ratio, 2),

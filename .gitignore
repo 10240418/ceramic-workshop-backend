@@ -60,3 +60,8 @@ influxdb_data/
 mysql_data/
 /deploy
 /backups
+# 忽略 Windows 路径的 data 文件夹
+data/
+C:/Users/20216/Documents/GitHub/Clutch/ceramic-workshop-backend/data/
+# md文件
+/vdoc

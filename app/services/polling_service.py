@@ -26,6 +26,7 @@ from app.plc.parser_hopper import HopperParser
 from app.plc.parser_roller_kiln import RollerKilnParser
 from app.plc.parser_scr_fan import SCRFanParser
 from app.tools import get_converter, CONVERTER_MAP
+from app.services.roller_kiln_aggregator import get_aggregator
 
 settings = get_settings()
 
@@ -519,6 +520,22 @@ async def _poll_data():
             for device in all_devices:
                 count = _add_device_to_buffer(device, all_devices[0].get('db_number', 8) if all_devices else 8, timestamp)
                 written_count += count
+                
+                # 🔧 如果是辊道窑设备，计算并添加总表数据
+                if device.get('device_id') == 'roller_kiln_1':
+                    aggregator = get_aggregator()
+                    
+                    # 生成总表数据点（用于写入数据库）
+                    total_point = aggregator.aggregate_zones(device, timestamp)
+                    if total_point:
+                        _point_buffer.append(total_point)
+                        written_count += 1
+                    
+                    # 生成总表缓存数据（用于API读取）
+                    total_cache = aggregator.aggregate_zones_for_cache(device, timestamp)
+                    if total_cache:
+                        with _data_lock:
+                            _latest_data['roller_kiln_total'] = total_cache
             
             # 检查是否需要批量写入
             _buffer_count += 1

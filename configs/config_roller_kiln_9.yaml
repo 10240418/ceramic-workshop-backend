@@ -8,7 +8,7 @@
 # 设备清单:
 #   - 辊道窑 (1个): 6*温度(2字节) + 6*电表(56字节) = 12 + 336 = 348字节
 # 
-# DB7总大小: 348字节
+# DB9总大小: 348字节
 # ============================================================
 
 db_config:
@@ -19,7 +19,8 @@ db_config:
 
 # ============================================================
 # 辊道窑 (1个) - 348字节
-# 模块顺序: 6个温度传感器(12 bytes) + 6个电表(336 bytes)
+# 模块顺序: 6个温度传感器(12 bytes) + 6个分区电表(336 bytes)
+# 注意: 没有主电表，只有6个分区电表
 # ============================================================
 roller_kiln:
   device_id: "roller_kiln_1"
@@ -66,46 +67,46 @@ roller_kiln:
       tag: "zone6_temp"
       description: "6号区温度"
   
-  # 6个电表 (主电表 + 5个分区电表) - 每个56字节
+  # 6个分区电表 - 每个56字节
   electricity_meters:
     - module_type: "ElectricityMeter"
       offset: 12
-      size: 56
-      tag: "main_meter"
-      description: "主电表"
-    
-    - module_type: "ElectricityMeter"
-      offset: 68
       size: 56
       tag: "zone1_meter"
       description: "1号区电表"
     
     - module_type: "ElectricityMeter"
-      offset: 124
+      offset: 68
       size: 56
       tag: "zone2_meter"
       description: "2号区电表"
     
     - module_type: "ElectricityMeter"
-      offset: 180
+      offset: 124
       size: 56
       tag: "zone3_meter"
       description: "3号区电表"
     
     - module_type: "ElectricityMeter"
-      offset: 236
+      offset: 180
       size: 56
       tag: "zone4_meter"
       description: "4号区电表"
     
     - module_type: "ElectricityMeter"
-      offset: 292
+      offset: 236
       size: 56
       tag: "zone5_meter"
       description: "5号区电表"
+    
+    - module_type: "ElectricityMeter"
+      offset: 292
+      size: 56
+      tag: "zone6_meter"
+      description: "6号区电表"
 
 # ============================================================
-# DB7 偏移量汇总表
+# DB9 偏移量汇总表
 # ============================================================
 # 模块             | 偏移量  | 大小  | 说明
 # -----------------|---------|-------|--------
@@ -115,12 +116,12 @@ roller_kiln:
 # zone4_temp       | 6       | 2     | 4号区温度
 # zone5_temp       | 8       | 2     | 5号区温度
 # zone6_temp       | 10      | 2     | 6号区温度
-# main_meter       | 12      | 56    | 主电表
-# zone1_meter      | 68      | 56    | 1号区电表
-# zone2_meter      | 124     | 56    | 2号区电表
-# zone3_meter      | 180     | 56    | 3号区电表
-# zone4_meter      | 236     | 56    | 4号区电表
-# zone5_meter      | 292     | 56    | 5号区电表
+# zone1_meter      | 12      | 56    | 1号区电表
+# zone2_meter      | 68      | 56    | 2号区电表
+# zone3_meter      | 124     | 56    | 3号区电表
+# zone4_meter      | 180     | 56    | 4号区电表
+# zone5_meter      | 236     | 56    | 5号区电表
+# zone6_meter      | 292     | 56    | 6号区电表
 # -----------------|---------|-------|--------
 # 总计             | 0-347   | 348   |
 # ============================================================

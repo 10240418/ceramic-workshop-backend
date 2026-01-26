@@ -1,11 +1,18 @@
 # ============================================================
-# 文件说明: feeding_analysis_service.py - 投料自动分析服务
+# 文件说明: feeding_analysis_service.py - 投料自动分析服务 (优化版)
 # ============================================================
 # 功能:
-# 1. 自动分析: 每6小时运行一次
-# 2. 数据源: 查询InlfuxDB过去6小时的料仓重量数据 (10分钟聚合)
-# 3. 算法: 识别投料事件 (重量激增) 并计算投料量
+# 1. 自动分析: 每5分钟运行一次 (实时性提升)
+# 2. 数据源: 查询InfluxDB过去30分钟的料仓重量数据 (原始6秒数据)
+# 3. 算法: Valley-Peak-Compensation 算法 (识别投料事件并计算投料量)
 # 4. 存储: 将计算结果存回 InfluxDB (measurement="feeding_records")
+# 5. 去重: 基于时间戳的天然去重机制
+# ============================================================
+# 优化点:
+# - 检测频率: 2小时 → 5分钟 (提升24倍)
+# - 聚合粒度: 30分钟 → 原始数据 (6秒轮询)
+# - 查询窗口: 24小时 → 30分钟 (减少查询负载)
+# - 边缘保护: 增强未完成投料的检测逻辑
 # ============================================================
 
 import asyncio
@@ -27,9 +34,30 @@ class FeedingAnalysisService:
     def __init__(self):
         self._is_running = False
         self._task = None
-        self.run_interval_minutes = 120   # 运行频率: 2小时检测一次
-        self.query_window_hours = 24      # 查询窗口: 回溯过去24小时 (1天)
-        self.aggregation_window = "30m"   # 聚合粒度: 放宽到30分钟
+        
+        # ============================================================
+        # 🔧 核心参数优化
+        # ============================================================
+        self.run_interval_minutes = 5      # 运行频率: 5分钟检测一次 (原2小时)
+        self.query_window_minutes = 30     # 查询窗口: 回溯30分钟 (原24小时)
+        self.use_raw_data = True           # 使用原始数据 (不聚合)
+        
+        # ============================================================
+        # 算法参数
+        # ============================================================
+        self.min_feeding_threshold = 10.0  # 最小投料阈值 (kg)
+        self.rising_step_threshold = 5.0   # 上升步长阈值 (kg)
+        self.drop_threshold = 5.0          # 下降阈值 (kg)
+        self.lookahead_steps = 3           # 前瞻步数 (防止波动误判)
+        
+        # ============================================================
+        # 优化参数 (v2.1)
+        # ============================================================
+        self.consumption_lookback = 5      # 消耗速率回溯点数 (多点平均)
+        self.enable_outlier_filter = False # 异常值过滤 (暂时禁用，需要测试)
+        self.outlier_threshold = 3.0       # Z-score 阈值
+        self.boundary_extension = 15       # 边界扩展时间 (分钟)
+        
         self.history_service = HistoryQueryService()
 
     def start(self):
@@ -38,61 +66,82 @@ class FeedingAnalysisService:
             return
         self._is_running = True
         self._task = asyncio.create_task(self._scheduled_loop())
-        print(f"🚀 [FeedingService] 投料分析服务已启动 (Frequency: {self.run_interval_minutes}m, Window: {self.query_window_hours}h)")
+        print(f"🚀 [FeedingService] 投料分析服务已启动")
+        print(f"   ⏱️  检测频率: {self.run_interval_minutes} 分钟")
+        print(f"   📊 查询窗口: {self.query_window_minutes} 分钟")
+        print(f"   🎯 数据模式: {'原始数据(6秒)' if self.use_raw_data else '聚合数据'}")
+        print(f"   📏 投料阈值: {self.min_feeding_threshold} kg")
 
     def stop(self):
         """停止服务"""
         self._is_running = False
         if self._task:
             self._task.cancel()
+        print(f"🛑 [FeedingService] 投料分析服务已停止")
 
     async def _scheduled_loop(self):
         """调度循环"""
-        # 初次启动等待一小段时间，避免和系统初始化冲突
-        await asyncio.sleep(60)
+        # 初次启动等待30秒，避免和系统初始化冲突
+        await asyncio.sleep(30)
         
         while self._is_running:
             try:
-                print(f"📊 [FeedingService] 开始执行投料分析任务...")
+                print(f"\n{'='*60}")
+                print(f"📊 [FeedingService] 开始执行投料分析任务 ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
+                print(f"{'='*60}")
+                
                 await self._analyze_feeding_job()
+                
                 print(f"✅ [FeedingService] 分析任务完成，下次运行在 {self.run_interval_minutes} 分钟后")
             except Exception as e:
                 print(f"❌ [FeedingService] 分析任务异常: {e}")
+                import traceback
+                traceback.print_exc()
             
             # 等待设定的间隔
             await asyncio.sleep(self.run_interval_minutes * 60)
 
     async def _analyze_feeding_job(self):
-        """执行具体的分析逻辑"""
+        """执行具体的分析逻辑 (优化版 v2.1)"""
         now = datetime.now(timezone.utc)
-        # 关键修改: 无论运行频率如何，始终回溯查询 query_window_hours 的数据
-        # 这样可以确保捕获跨越边界的事件，并通过 InfluxDB 的幂等写入特性更新/修正记录
-        start_time = now - timedelta(hours=self.query_window_hours)
+        
+        # 优化: 边界扩展，避免漏检跨边界的投料事件
+        extended_window = self.query_window_minutes + self.boundary_extension
+        start_time = now - timedelta(minutes=extended_window)
         
         # 1. 获取所有料仓设备 (过滤 no_hopper)
         hopper_devices = self._get_hopper_devices()
-        print(f"   📋 目标设备: {len(hopper_devices)} 台 ({', '.join(hopper_devices)})")
+        print(f"   📋 目标设备: {len(hopper_devices)} 台")
+        print(f"   🕐 时间范围: {start_time.strftime('%H:%M:%S')} → {now.strftime('%H:%M:%S')}")
         
         results = []
+        total_events = 0
         
         for device_id in hopper_devices:
-            # 延迟5秒，防止高并发查询导致系统崩溃
-            await asyncio.sleep(5)
+            # 延迟1秒，防止高并发查询
+            await asyncio.sleep(1)
             
-            # 2. 查询历史数据 (聚合)
+            # 2. 查询历史数据
             records = self._query_history_weights(device_id, start_time, now)
             if not records:
+                print(f"      ⚠️  {device_id}: 无数据")
                 continue
+            
+            print(f"      🔍 {device_id}: 查询到 {len(records)} 个数据点")
                 
             # 3. 计算投料量
             feeding_events = self._detect_and_calculate_feeding(records, device_id)
             if feeding_events:
                 results.extend(feeding_events)
-                print(f"      🔹 设备 {device_id}: 发现 {len(feeding_events)} 次投料")
+                total_events += len(feeding_events)
+                print(f"      ✅ {device_id}: 发现 {len(feeding_events)} 次投料")
 
         # 4. 批量保存结果
         if results:
             self._save_feeding_records(results)
+            print(f"\n   💾 本次分析: 共发现 {total_events} 次投料事件")
+        else:
+            print(f"\n   ℹ️  本次分析: 未发现新的投料事件")
 
     def _get_hopper_devices(self) -> List[str]:
         """获取所有带料仓的设备ID"""
@@ -125,16 +174,39 @@ class FeedingAnalysisService:
         return devices
 
     def _query_history_weights(self, device_id: str, start: datetime, end: datetime) -> List[Dict]:
-        """查询聚合后的重量历史"""
-        query = f'''
-        from(bucket: "{settings.influx_bucket}")
-            |> range(start: {start.isoformat().replace("+00:00", "Z")}, stop: {end.isoformat().replace("+00:00", "Z")})
-            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
-            |> filter(fn: (r) => r["device_id"] == "{device_id}")
-            |> filter(fn: (r) => r["_field"] == "weight")
-            |> aggregateWindow(every: {self.aggregation_window}, fn: mean, createEmpty: false)
-            |> yield(name: "mean")
-        '''
+        """
+        查询重量历史数据
+        
+        Args:
+            device_id: 设备ID
+            start: 开始时间
+            end: 结束时间
+            
+        Returns:
+            List[Dict]: 数据点列表 [{"time": datetime, "value": float}, ...]
+        """
+        # 根据配置决定是否聚合
+        if self.use_raw_data:
+            # 使用原始数据 (6秒轮询间隔)
+            query = f'''
+            from(bucket: "{settings.influx_bucket}")
+                |> range(start: {start.isoformat().replace("+00:00", "Z")}, stop: {end.isoformat().replace("+00:00", "Z")})
+                |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+                |> filter(fn: (r) => r["device_id"] == "{device_id}")
+                |> filter(fn: (r) => r["_field"] == "weight")
+                |> sort(columns: ["_time"])
+            '''
+        else:
+            # 使用聚合数据 (向后兼容)
+            query = f'''
+            from(bucket: "{settings.influx_bucket}")
+                |> range(start: {start.isoformat().replace("+00:00", "Z")}, stop: {end.isoformat().replace("+00:00", "Z")})
+                |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+                |> filter(fn: (r) => r["device_id"] == "{device_id}")
+                |> filter(fn: (r) => r["_field"] == "weight")
+                |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)
+                |> yield(name: "mean")
+            '''
         
         try:
             result = self.history_service.query_api.query(query)
@@ -142,48 +214,79 @@ class FeedingAnalysisService:
             for table in result:
                 for record in table.records:
                     val = record.get_value()
-                    if val is not None:
+                    if val is not None and val > 0:  # 过滤无效数据
                         data_points.append({
                             "time": record.get_time(),
                             "value": float(val)
                         })
+            
             # 按时间排序
             data_points.sort(key=lambda x: x['time'])
             return data_points
         except Exception as e:
-            print(f"⚠️ 查询 {device_id} 失败: {e}")
+            print(f"      ❌ 查询 {device_id} 失败: {e}")
             return []
 
     def _detect_and_calculate_feeding(self, records: List[Dict], device_id: str) -> List[Point]:
         """
-        核心算法: 识别投料并计算 (Enhanced Logic v2 - 带去重)
+        核心算法: Valley-Peak-Compensation 投料检测算法 (优化版)
+        
+        算法原理:
+        ┌─────────────────────────────────────────────────────────┐
+        │  投料过程示意图:                                          │
+        │                                                          │
+        │  Weight                                                  │
+        │    ▲                                                     │
+        │    │         Peak (投料结束)                             │
+        │    │          ●                                          │
+        │    │         ╱ ╲                                         │
+        │    │        ╱   ╲                                        │
+        │    │       ╱     ╲ (消耗下降)                            │
+        │    │      ╱       ╲                                      │
+        │    │     ╱ (投料)  ╲                                     │
+        │    │    ╱           ╲                                    │
+        │    │   ●             ●                                   │
+        │    │  Valley      Next Valley                            │
+        │    │  (投料开始)                                          │
+        │    └──────────────────────────────────► Time            │
+        │                                                          │
+        │  计算公式:                                                │
+        │  Total_Added = (Peak - Valley) + Compensation           │
+        │                                                          │
+        │  其中:                                                    │
+        │  - Valley: 投料前的最低点                                 │
+        │  - Peak: 投料后的最高点                                   │
+        │  - Compensation: 投料过程中的消耗补偿                      │
+        │    = (PreValley - Valley) × 投料持续间隔数                │
+        └─────────────────────────────────────────────────────────┘
         
         逻辑流程:
-        1. 寻找 Valley (投料开始前的最低点)
-        2. 追踪 Rising Edge (连续上升区间), 计数间隔 x
-        3. 确定 Peak (投料结束后的最高点)
-        4. 计算消耗补偿 Consumption
-           - 寻找 Pre-Valley Slope (投料前的消耗速率)
-           - Consumption = (Consumption_Rate_Per_Interval) * x
-        5. Total Added = (Peak - Valley) + Consumption
-        6. 阈值: Rising amount > 10kg
-        7. [NEW] 去重: 每次检测后设置冷却期，防止同一上升区间被重复记录
+        1. 遍历数据点，寻找上升起点 (Valley)
+        2. 追踪连续上升区间 (Rising Edge)
+        3. 识别峰值点 (Peak)，带前瞻机制防止波动误判
+        4. 计算消耗补偿 (基于投料前的消耗速率)
+        5. 计算总投料量 = 净增量 + 消耗补偿
+        6. 边缘保护: 跳过数据末尾未完成的投料事件
+        7. 去重机制: 基于 Valley 时间戳的天然去重
+        
+        Args:
+            records: 重量数据点列表 [{"time": datetime, "value": float}, ...]
+            device_id: 设备ID
+            
+        Returns:
+            List[Point]: InfluxDB Point 列表
         """
         events = []
         n = len(records)
-        if n < 2:
+        if n < 3:  # 至少需要3个点 (PreValley, Valley, Peak)
             return []
 
-        # 阈值: 只有上升总高度超过此值才触发复杂计算
-        # 用户需求: > 10kg 即为有效投料
-        THRESHOLD = 10.0 
-        
-        # [NEW] 冷却期: 记录上一次检测到的 Peak 索引，避免重复检测
+        # 冷却期: 记录上一次检测到的 Peak 索引，避免重复检测
         last_peak_idx = -1
         
         i = 1
         while i < n:
-            # [NEW] 跳过冷却期内的点
+            # 跳过冷却期内的点
             if i <= last_peak_idx:
                 i += 1
                 continue
@@ -191,131 +294,286 @@ class FeedingAnalysisService:
             curr = records[i]
             prev = records[i-1]
             
-            # 检测到起步上升
-            if curr['value'] > prev['value'] + 5.0: # 至少有微小上升才开始追踪
+            # ============================================================
+            # 步骤1: 检测上升起点 (Valley)
+            # ============================================================
+            if curr['value'] > prev['value'] + self.rising_step_threshold:
                 valley_idx = i - 1
                 valley_val = prev['value']
+                valley_time = prev['time']
                 
-                # 追踪连续上升 (允许偶尔持平或极小回落/抖动视为上升过程)
-                # 寻找 Peak
+                # ============================================================
+                # 步骤2: 追踪连续上升区间 (Rising Edge)
+                # ============================================================
                 peak_idx = i
                 while peak_idx < n - 1:
-                    next_val = records[peak_idx+1]['value']
+                    next_val = records[peak_idx + 1]['value']
                     curr_val = records[peak_idx]['value']
                     
-                    # 如果仍在上升
+                    # 仍在上升
                     if next_val >= curr_val:
                         peak_idx += 1
                         continue
-                        
-                    # 如果下降了，但可能只是波动（比如下降很少），可以向后多看几个点？
-                    # [FIX] 增加 Lookahead 机制，防止因临时微小波动导致投料误判提前结束
+                    
+                    # 检测到下降，启动前瞻机制防止波动误判
                     if next_val < curr_val:
-                        # 检查未来 3 个点，看是否有反弹（超过当前值）
+                        # 前瞻机制: 检查未来N个点是否有反弹
                         is_fluctuation = False
-                        lookahead_steps = 3
-                        for k in range(1, lookahead_steps + 1):
-                            if peak_idx + 1 + k >= n: 
-                                break # 数据不够了
+                        for k in range(1, self.lookahead_steps + 1):
+                            if peak_idx + 1 + k >= n:
+                                break
                             future_val = records[peak_idx + 1 + k]['value']
                             if future_val >= curr_val:
-                                # 发现后面又涨上去了，说明刚才只是波动
+                                # 发现反弹，说明是波动
                                 is_fluctuation = True
-                                # 跳过中间的波动点，直接把 peak_idx 移到这个更高的点前一个（因为循环末尾会+1）
-                                peak_idx += k 
+                                peak_idx += k
                                 break
                         
                         if is_fluctuation:
                             peak_idx += 1
-                            continue # 继续追踪上升
-                            
-                        # 确实下降了，且短期没反弹
-                        # 只有下降幅度超过阈值（例如 5.0kg）才认为是真正的结束，或者是持续下降
+                            continue
+                        
+                        # 确认下降: 只有显著下降才认为投料结束
                         drop_diff = curr_val - next_val
-                        if drop_diff > 5.0: 
-                             break # 显著下降，认定投料停止
-                        
-                        # 如果是微小下降且没反弹（可能是平缓期），继续往后看？
-                        # 这种情况下通常也认为是顶峰了，除非下降真的很小 (<5.0kg)
-                        # 如果下降很小，让他继续走，可能会遇到更大的下降或上升
-                        # 但为了安全，如果 continuous decrease...
-                        
+                        if drop_diff > self.drop_threshold:
+                            break
+                    
                     peak_idx += 1
                 
-                # [CRITICAL FIX] 边缘检测保护
-                # 如果循环是因为到了数据末尾 (peak_idx == n-1) 而结束，说明投料过程可能仍在继续（或者刚达到峰值但还没开始下降）
-                # 此时不能仓促下结论，应该跳过本次计算，等待更多数据进来后再确认
+                # ============================================================
+                # 步骤3: 边缘保护 (防止未完成的投料事件)
+                # ============================================================
                 if peak_idx >= n - 1:
-                    # 记录调试信息但不保存
-                    # print(f"      ⏳ 投料未结束 (Edge case): {records[valley_idx]['time']} -> {records[peak_idx]['time']}, 等待更多数据...")
+                    # 投料可能未结束，等待更多数据
+                    print(f"         ⏳ {device_id}: 投料未完成 (边缘数据)，等待下次分析")
                     break
                 
                 peak_val = records[peak_idx]['value']
+                peak_time = records[peak_idx]['time']
                 raw_increase = peak_val - valley_val
                 
-                # 判断是否满足 > 50kg 的触发条件
-                if raw_increase > THRESHOLD:
-                    # 计算持续间隔数 x
-                    # 10分钟一个点。间隔数即 peak_idx - valley_idx
+                # ============================================================
+                # 步骤4: 阈值判断
+                # ============================================================
+                if raw_increase > self.min_feeding_threshold:
+                    # 计算持续间隔数
                     x_intervals = peak_idx - valley_idx
                     
-                    # 计算 Pre-Valley 的消耗速率
-                    # 寻找 valley 前面几个点来估算斜率
-                    consumption_rate = 0.0
-                    if valley_idx >= 1:
-                        # 只看前一个区间 (PreValley - Valley)
-                        # 用户: "(PreValley - Valley)"
-                        pre_valley_val = records[valley_idx-1]['value']
-                        rate = pre_valley_val - valley_val
-                        if rate > 0:
-                            consumption_rate = rate
-                        
-                        # 也可以多看几个取平均，但用户似乎倾向于只看前一个
+                    # ============================================================
+                    # 步骤5: 计算消耗补偿 (优化版 v2.1 - 多点平均)
+                    # ============================================================
+                    consumption_rate = self._calculate_consumption_rate(
+                        records, valley_idx, self.consumption_lookback
+                    )
                     
-                    # 如果前一个没有数据（比如刚开始查），设定一个默认最小消耗速率？
-                    # 暂时保持 0
-                    
-                    # 核心公式: Peak - Valley + (Consumption_Rate * x)
-                    # 用户原话: "乘以x了"
                     compensation = consumption_rate * x_intervals
-                    
                     total_added = raw_increase + compensation
                     
-                    # 构建记录 
-                    # [Changed] 使用 Valley (开始上升点) 作为记录时间戳，而非 Peak
-                    # 这样可以保证每次计算的时间戳一致性（基于原始数据点），实现 InfluxDB 天然去重
+                    # 计算投料持续时间 (秒)
+                    duration_seconds = (peak_time - valley_time).total_seconds()
+                    
+                    # ============================================================
+                    # 步骤6: 构建 InfluxDB Point
+                    # ============================================================
                     p = Point("feeding_records") \
                         .tag("device_id", device_id) \
                         .field("added_weight", float(total_added)) \
                         .field("raw_increase", float(raw_increase)) \
-                        .field("duration_intervals", int(x_intervals)) \
                         .field("compensation", float(compensation)) \
-                        .time(records[valley_idx]['time'])
+                        .field("consumption_rate", float(consumption_rate)) \
+                        .field("duration_seconds", int(duration_seconds)) \
+                        .field("valley_weight", float(valley_val)) \
+                        .field("peak_weight", float(peak_val)) \
+                        .time(valley_time)  # 使用 Valley 时间戳实现去重
                     
                     events.append(p)
                     
-                    # [CRITICAL] 设置冷却期: 跳过已处理的整个上升区间
-                    # 下一次检测必须从 peak_idx + 1 开始
+                    # 设置冷却期
                     last_peak_idx = peak_idx
                     i = peak_idx + 1
                     
-                    print(f"      ✅ 检测到投料: Valley={records[valley_idx]['time']}, Peak={records[peak_idx]['time']}, Added={total_added:.1f}kg")
+                    print(f"         ✅ 投料事件: {valley_time.strftime('%H:%M:%S')} → {peak_time.strftime('%H:%M:%S')}, "
+                          f"投料量={total_added:.1f}kg (净增={raw_increase:.1f}kg, 补偿={compensation:.1f}kg, 消耗率={consumption_rate:.2f}kg/interval)")
                 else:
-                    # 没超过阈值，可能是小波动，继续
+                    # 未超过阈值，继续
                     i += 1
             else:
                 i += 1
                 
         return events
 
+    def _calculate_consumption_rate(self, records: List[Dict], valley_idx: int, lookback: int = 5) -> float:
+        """
+        计算投料前的平均消耗速率 (优化版 v2.1)
+        
+        使用多点平均而非单点，提高准确性和抗干扰能力
+        
+        Args:
+            records: 数据点列表
+            valley_idx: Valley 索引
+            lookback: 回溯点数 (默认5个点)
+            
+        Returns:
+            float: 平均消耗速率 (kg/interval)
+            
+        示例:
+            records = [110, 109, 108, 107, 106, 100 (Valley)]
+            valley_idx = 5
+            lookback = 5
+            
+            计算:
+            - rate1 = 110 - 109 = 1 kg
+            - rate2 = 109 - 108 = 1 kg
+            - rate3 = 108 - 107 = 1 kg
+            - rate4 = 107 - 106 = 1 kg
+            - rate5 = 106 - 100 = 6 kg (异常，但会被平均稀释)
+            
+            平均消耗速率 = (1+1+1+1+6) / 5 = 2 kg/interval
+            
+            如果只用单点 (原算法):
+            消耗速率 = 106 - 100 = 6 kg/interval (错误!)
+        """
+        if valley_idx < 1:
+            return 0.0
+        
+        # 调整回溯点数，不超过可用数据
+        actual_lookback = min(lookback, valley_idx)
+        
+        if actual_lookback < 1:
+            return 0.0
+        
+        # 计算多个区间的消耗速率
+        rates = []
+        for i in range(actual_lookback):
+            curr_idx = valley_idx - i
+            prev_idx = curr_idx - 1
+            
+            if prev_idx >= 0:
+                curr_val = records[curr_idx]['value']
+                prev_val = records[prev_idx]['value']
+                rate = prev_val - curr_val
+                
+                # 只统计下降的情况 (消耗)
+                if rate > 0:
+                    rates.append(rate)
+        
+        # 返回平均值
+        if rates:
+            avg_rate = sum(rates) / len(rates)
+            return avg_rate
+        else:
+            return 0.0
+
+    def _filter_outliers(self, records: List[Dict], threshold: float = 3.0) -> List[Dict]:
+        """
+        过滤异常值 (使用 Z-score 方法)
+        
+        Args:
+            records: 原始数据点
+            threshold: Z-score 阈值 (默认3.0，即3倍标准差)
+            
+        Returns:
+            List[Dict]: 过滤后的数据点
+            
+        说明:
+            Z-score = (x - mean) / std_dev
+            如果 |Z-score| > threshold，则认为是异常值
+        """
+        if len(records) < 3:
+            return records
+        
+        # 计算均值和标准差
+        values = [r['value'] for r in records]
+        mean = sum(values) / len(values)
+        variance = sum((x - mean) ** 2 for x in values) / len(values)
+        std_dev = variance ** 0.5
+        
+        if std_dev == 0:
+            return records
+        
+        # 过滤异常值
+        filtered = []
+        outlier_count = 0
+        for record in records:
+            z_score = abs((record['value'] - mean) / std_dev)
+            if z_score <= threshold:
+                filtered.append(record)
+            else:
+                outlier_count += 1
+        
+        if outlier_count > 0:
+            print(f"      ⚠️  过滤了 {outlier_count} 个异常值")
+        
+        # 如果全部被过滤，返回原数据
+        return filtered if filtered else records
+
     def _save_feeding_records(self, points: List[Point]):
-        """保存到 InfluxDB"""
+        """
+        保存投料记录到 InfluxDB
+        
+        注意: InfluxDB 基于 (measurement, tags, timestamp) 的组合实现天然去重
+        相同时间戳的记录会被自动覆盖，无需手动去重
+        """
         try:
             write_api = self.history_service.client.write_api(write_options=SYNCHRONOUS)
             write_api.write(bucket=settings.influx_bucket, record=points)
-            print(f"💾 已保存 {len(points)} 条投料记录")
+            print(f"   💾 已保存 {len(points)} 条投料记录到 InfluxDB")
         except Exception as e:
-            print(f"❌ 保存投料记录失败: {e}")
+            print(f"   ❌ 保存投料记录失败: {e}")
+            import traceback
+            traceback.print_exc()
 
+# ============================================================
 # 单例导出
+# ============================================================
 feeding_service = FeedingAnalysisService()
+
+
+# ============================================================
+# 手动触发分析 (用于测试)
+# ============================================================
+async def manual_analyze_feeding(device_ids: Optional[List[str]] = None):
+    """
+    手动触发投料分析 (用于测试或前端手动刷新)
+    
+    Args:
+        device_ids: 指定设备ID列表，None表示分析所有设备
+        
+    Returns:
+        Dict: 分析结果统计
+    """
+    service = FeedingAnalysisService()
+    
+    now = datetime.now(timezone.utc)
+    start_time = now - timedelta(minutes=service.query_window_minutes)
+    
+    if device_ids is None:
+        device_ids = service._get_hopper_devices()
+    
+    results = []
+    stats = {
+        "total_devices": len(device_ids),
+        "devices_with_events": 0,
+        "total_events": 0,
+        "details": []
+    }
+    
+    for device_id in device_ids:
+        records = service._query_history_weights(device_id, start_time, now)
+        if not records:
+            continue
+        
+        feeding_events = service._detect_and_calculate_feeding(records, device_id)
+        if feeding_events:
+            results.extend(feeding_events)
+            stats["devices_with_events"] += 1
+            stats["total_events"] += len(feeding_events)
+            stats["details"].append({
+                "device_id": device_id,
+                "events_count": len(feeding_events)
+            })
+    
+    if results:
+        service._save_feeding_records(results)
+    
+    return stats

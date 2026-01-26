@@ -20,8 +20,10 @@ class RollerKilnParser:
     """辊道窑数据块解析器
     
     负责解析辊道窑设备数据:
-    - 6个电表 (主电表 + 5个分区电表)
+    - 6个分区电表 (zone1_meter ~ zone6_meter)
     - 6个温度传感器 (对应6个温区)
+    
+    注意: 没有主电表，只有6个分区电表
     """
     
     # 项目根目录 (ceramic-workshop-backend/)
@@ -36,7 +38,7 @@ class RollerKilnParser:
         """初始化解析器
         
         Args:
-            db_config_path: DB7配置文件路径
+            db_config_path: DB9配置文件路径
             module_config_path: 基础模块配置文件路径
         """
         # 使用绝对路径，避免工作目录问题
@@ -53,21 +55,22 @@ class RollerKilnParser:
     # 2. load_config() - 加载配置
     # ------------------------------------------------------------
     def load_config(self):
-        """加载DB7配置和基础模块配置"""
+        """加载DB9配置和基础模块配置"""
         # 加载基础模块配置
         with open(self.module_config_path, 'r', encoding='utf-8') as f:
             module_config = yaml.safe_load(f)
             for module in module_config.get('modules', []):
                 self.base_modules[module['name']] = module
         
-        # 加载DB7辊道窑配置
+        # 加载DB9辊道窑配置
         with open(self.db_config_path, 'r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
             self.db_config = config.get('db_config', {})
             self.device_config = config.get('roller_kiln', {})
         
-        print(f"✅ DB7解析器初始化完成: 设备={self.device_config['device_name']}, "
-              f"DB{self.db_config['db_number']}, 总大小{self.db_config['total_size']}字节")
+        print(f"✅ DB9解析器初始化完成: 设备={self.device_config['device_name']}, "
+              f"DB{self.db_config['db_number']}, 总大小{self.db_config['total_size']}字节, "
+              f"6个分区电表")
     
     # ------------------------------------------------------------
     # 3. parse_module() - 解析单个模块数据
@@ -77,8 +80,8 @@ class RollerKilnParser:
         
         Args:
             module_config: 模块配置
-            data: DB7的完整字节数据
-            offset: 模块在DB7中的起始偏移量
+            data: DB9的完整字节数据
+            offset: 模块在DB9中的起始偏移量
             
         Returns:
             解析后的模块数据
@@ -144,16 +147,16 @@ class RollerKilnParser:
         }
     
     # ------------------------------------------------------------
-    # 4. parse_all() - 解析DB7辊道窑数据
+    # 4. parse_all() - 解析DB9辊道窑数据
     # ------------------------------------------------------------
-    def parse_all(self, db7_data: bytes) -> List[Dict[str, Any]]:
-        """解析DB7辊道窑数据
+    def parse_all(self, db9_data: bytes) -> List[Dict[str, Any]]:
+        """解析DB9辊道窑数据
         
         Args:
-            db7_data: DB7的完整字节数据
+            db9_data: DB9的完整字节数据
             
         Returns:
-            设备列表 (与DB6/DB8格式统一，便于统一处理)
+            设备列表 (与DB8/DB10格式统一，便于统一处理)
         """
         device_result = {
             'device_id': self.device_config['device_id'],
@@ -165,24 +168,24 @@ class RollerKilnParser:
         }
         
         try:
-            # 解析6个电表
+            # 解析6个分区电表 (zone1_meter ~ zone6_meter)
             for meter_config in self.device_config['electricity_meters']:
                 offset = meter_config['offset']
                 tag = meter_config['tag']
-                parsed = self.parse_module(meter_config, db7_data, offset)
+                parsed = self.parse_module(meter_config, db9_data, offset)
                 device_result['modules'][tag] = parsed
             
             # 解析6个温度传感器
             for temp_config in self.device_config['temperature_sensors']:
                 offset = temp_config['offset']
                 tag = temp_config['tag']
-                parsed = self.parse_module(temp_config, db7_data, offset)
+                parsed = self.parse_module(temp_config, db9_data, offset)
                 device_result['modules'][tag] = parsed
         
         except Exception as e:
             print(f"⚠️  解析辊道窑数据失败: {e}")
         
-        # 返回列表格式，与DB6/DB8统一
+        # 返回列表格式，与DB8/DB10统一
         return [device_result]
     
     # ------------------------------------------------------------
@@ -221,8 +224,8 @@ if __name__ == "__main__":
     print(f"  - 电表数量: {info['meter_count']}个")
     print(f"  - 温度传感器: {info['temp_count']}个")
     
-    # 模拟DB7数据 (288字节全0)
-    test_data = bytes(288)
+    # 模拟DB9数据 (348字节全0)
+    test_data = bytes(348)
     
     # 解析辊道窑数据 (返回列表)
     results = parser.parse_all(test_data)

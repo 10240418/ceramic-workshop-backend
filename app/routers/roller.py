@@ -125,21 +125,23 @@ async def get_roller_realtime_formatted():
           "current_b": 100.0,
           "current_c": 100.0
         },
-        ...
+        ...  // zone2-zone6
       ],
-      "main_meter": {
+      "total": {
         "power": 240.0,
         "energy": 8500.0,
         "voltage": 220.0,
-        "current_a": 100.0,
-        "current_b": 100.0,
-        "current_c": 100.0
+        "current_a": 600.0,
+        "current_b": 600.0,
+        "current_c": 600.0
       }
     }
     ```
     
-    **电流变比说明**:
-    辊道窑电流变比为60，返回的电流数据已经乘以变比后的一次侧实际电流
+    **说明**:
+    - zones: 6个分区电表数据（zone1-zone6）
+    - total: 总表数据（6个分区之和，由后端计算）
+    - 电流变比为60，返回的电流数据已经乘以变比后的一次侧实际电流
     """
     try:
         # 优先从内存缓存读取（与其他API保持一致）
@@ -156,7 +158,7 @@ async def get_roller_realtime_formatted():
         
         modules = raw_data.get("modules", {})
         
-        # 格式化温区数据 (包含三相电压和三相电流)
+        # 格式化温区数据 (6个分区)
         zones = []
         for i in range(1, 7):
             zone_id = f"zone{i}"
@@ -180,23 +182,35 @@ async def get_roller_realtime_formatted():
             }
             zones.append(zone_data)
         
-        # 主电表数据 (包含三相电压和三相电流)
-        main_meter = modules.get("main_meter", {}).get("fields", {})
+        # 获取总表数据（从缓存中读取后端计算的总值）
+        total_cached = get_latest_device_data("roller_kiln_total")
+        
+        if total_cached:
+            total_fields = total_cached.get("modules", {}).get("total_meter", {}).get("fields", {})
+            total_data = {
+                "power": total_fields.get("Pt", 0.0),
+                "energy": total_fields.get("ImpEp", 0.0),
+                "voltage": total_fields.get("Ua_0", 0.0),
+                "current_a": total_fields.get("I_0", 0.0),
+                "current_b": total_fields.get("I_1", 0.0),
+                "current_c": total_fields.get("I_2", 0.0),
+            }
+        else:
+            # 如果总表缓存不存在，前端可以自行累加
+            total_data = {
+                "power": sum(z["power"] for z in zones),
+                "energy": sum(z["energy"] for z in zones),
+                "voltage": sum(z["voltage"] for z in zones) / 6 if zones else 0.0,
+                "current_a": sum(z["current_a"] for z in zones),
+                "current_b": sum(z["current_b"] for z in zones),
+                "current_c": sum(z["current_c"] for z in zones),
+            }
         
         formatted_data = {
             "device_id": raw_data.get("device_id"),
             "timestamp": raw_data.get("timestamp"),
             "zones": zones,
-            "main_meter": {
-                "power": main_meter.get("Pt", 0.0),
-                "energy": main_meter.get("ImpEp", 0.0),
-                # A相电压
-                "voltage": main_meter.get("Ua_0", 0.0),
-                # 三相电流 (已乘变比60)
-                "current_a": main_meter.get("I_0", 0.0),
-                "current_b": main_meter.get("I_1", 0.0),
-                "current_c": main_meter.get("I_2", 0.0),
-            }
+            "total": total_data
         }
         
         return ApiResponse.ok(formatted_data)

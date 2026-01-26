@@ -1,0 +1,104 @@
+# ============================================================
+# 陶瓷车间后端 Docker Compose 配置 (本地 Mock 模式)
+# 用途: 本地开发测试，使用模拟数据
+# 启动: docker-compose -f docker-compose.mock.yml up -d
+# 停止: docker-compose -f docker-compose.mock.yml down
+# ============================================================
+
+services:
+  # ============================================================
+  # InfluxDB 时序数据库
+  # ============================================================
+  influxdb:
+    image: influxdb:2.7
+    container_name: ceramic-influxdb-mock
+    restart: unless-stopped
+    ports:
+      - '8086:8086'
+    volumes:
+      # 本地测试：使用相对路径挂载到项目目录
+      - ./data/influxdb_data:/var/lib/influxdb2
+      - ./data/influxdb_config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=1090119your
+      - DOCKER_INFLUXDB_INIT_ORG=ceramic-workshop
+      - DOCKER_INFLUXDB_INIT_BUCKET=sensor_data
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=ceramic-workshop-token
+      - TZ=Asia/Shanghai
+    networks:
+      - ceramic-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8086/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================================
+  # 后端服务 (Mock 模式)
+  # ============================================================
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ceramic-backend:mock-local
+    container_name: ceramic-backend-mock
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    depends_on:
+      influxdb:
+        condition: service_healthy
+    volumes:
+      # 挂载代码目录，方便实时调试
+      - ./app:/app/app
+      - ./configs:/app/configs
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - INFLUX_URL=http://influxdb:8086
+      - INFLUX_TOKEN=ceramic-workshop-token
+      - INFLUX_ORG=ceramic-workshop
+      - INFLUX_BUCKET=sensor_data
+      - ENABLE_POLLING=true
+      - MOCK_MODE=true
+      - VERBOSE_POLLING_LOG=true
+      - DEBUG=true
+      - PLC_IP=192.168.50.223
+      - PLC_RACK=0
+      - PLC_SLOT=1
+      - PLC_POLL_INTERVAL=6
+      - BATCH_WRITE_SIZE=10
+      - TZ=Asia/Shanghai
+    networks:
+      - ceramic-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8080/api/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  ceramic-network:
+    driver: bridge

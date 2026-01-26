@@ -1,7 +1,7 @@
 # 料仓设备API路由
 
 from fastapi import APIRouter, Query, Path
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
@@ -13,6 +13,8 @@ from app.services.polling_service import (
     get_latest_timestamp,
     is_polling_running
 )
+# 引入投料分析服务
+from app.services.feeding_analysis_service import manual_analyze_feeding
 # 引入 InfluxDB 写入
 from app.core.influxdb import get_influx_client, write_points_batch
 from influxdb_client import Point
@@ -408,4 +410,79 @@ async def purge_hopper_feeding_records(
         })
     except Exception as e:
         return ApiResponse.fail(f"Purge fail: {str(e)}")
+
+
+# ============================================================
+# 7. POST /api/hopper/feeding-analysis/trigger - 手动触发投料分析
+# ============================================================
+@router.post("/feeding-analysis/trigger")
+async def trigger_feeding_analysis(
+    device_ids: Optional[List[str]] = Query(
+        None,
+        description="指定设备ID列表，为空则分析所有料仓",
+        example=["short_hopper_1", "long_hopper_1"]
+    )
+):
+    """
+    手动触发投料分析任务
+    
+    **用途**:
+    - 前端手动刷新投料记录
+    - 测试投料分析算法
+    - 补充分析遗漏的数据
+    
+    **返回结果**:
+    ```json
+    {
+        "success": true,
+        "data": {
+            "total_devices": 7,
+            "devices_with_events": 3,
+            "total_events": 5,
+            "details": [
+                {"device_id": "short_hopper_1", "events_count": 2},
+                {"device_id": "long_hopper_2", "events_count": 3}
+            ]
+        }
+    }
+    ```
+    """
+    try:
+        stats = await manual_analyze_feeding(device_ids)
+        return ApiResponse.ok(stats)
+    except Exception as e:
+        return ApiResponse.fail(f"触发投料分析失败: {str(e)}")
+
+
+# ============================================================
+# 8. GET /api/hopper/feeding-analysis/status - 获取投料分析服务状态
+# ============================================================
+@router.get("/feeding-analysis/status")
+async def get_feeding_analysis_status():
+    """
+    获取投料分析服务的运行状态
+    
+    **返回信息**:
+    - 服务是否运行
+    - 检测频率
+    - 查询窗口
+    - 算法参数
+    """
+    try:
+        from app.services.feeding_analysis_service import feeding_service
+        
+        return ApiResponse.ok({
+            "is_running": feeding_service._is_running,
+            "run_interval_minutes": feeding_service.run_interval_minutes,
+            "query_window_minutes": feeding_service.query_window_minutes,
+            "use_raw_data": feeding_service.use_raw_data,
+            "algorithm_params": {
+                "min_feeding_threshold": feeding_service.min_feeding_threshold,
+                "rising_step_threshold": feeding_service.rising_step_threshold,
+                "drop_threshold": feeding_service.drop_threshold,
+                "lookahead_steps": feeding_service.lookahead_steps
+            }
+        })
+    except Exception as e:
+        return ApiResponse.fail(f"获取状态失败: {str(e)}")
 
