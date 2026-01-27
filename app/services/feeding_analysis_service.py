@@ -1,12 +1,18 @@
 # ============================================================
-# 文件说明: feeding_analysis_service.py - 投料自动分析服务 (优化版)
+# 文件说明: feeding_analysis_service.py - 投料自动分析服务 (v2.2 固定下料速度版)
 # ============================================================
 # 功能:
 # 1. 自动分析: 每5分钟运行一次 (实时性提升)
 # 2. 数据源: 查询InfluxDB过去30分钟的料仓重量数据 (原始6秒数据)
 # 3. 算法: Valley-Peak-Compensation 算法 (识别投料事件并计算投料量)
 # 4. 存储: 将计算结果存回 InfluxDB (measurement="feeding_records")
-# 5. 去重: 基于时间戳的天然去重机制
+# 5. 去重: 基于 (device_id, valley_timestamp) 的内存去重机制
+# ============================================================
+# v2.2 核心改进 (2026-01-27):
+# - 固定下料速度: 窑7654=10kg/h, 窑839=22kg/h (不再动态计算)
+# - 补偿计算: 固定下料速度 × 投料持续时间 (秒)
+# - 去重机制: 内存缓存已处理事件，防止5分钟检测导致重复存储
+# - 边缘保护: 未完成的投料不存数据库，等待下次分析
 # ============================================================
 # 优化点:
 # - 检测频率: 2小时 → 5分钟 (提升24倍)
@@ -51,11 +57,24 @@ class FeedingAnalysisService:
         self.lookahead_steps = 3           # 前瞻步数 (防止波动误判)
         
         # ============================================================
+        # 固定下料速度配置 (v2.2 - 用户定制)
+        # ============================================================
+        # 窑7654 (short_hopper): 10 kg/h
+        # 窑839 (long_hopper): 22 kg/h
+        self.feed_rate_short_hopper = 10.0 / 3600.0  # kg/秒
+        self.feed_rate_long_hopper = 22.0 / 3600.0   # kg/秒
+        
+        # ============================================================
+        # 去重机制 (v2.2 - 防止重复存储)
+        # ============================================================
+        # 记录已处理的投料事件 (device_id, valley_time)
+        # 结构: {(device_id, valley_timestamp): True}
+        self.processed_events = {}
+        self.max_cache_size = 1000  # 最多缓存1000条记录
+        
+        # ============================================================
         # 优化参数 (v2.1)
         # ============================================================
-        self.consumption_lookback = 5      # 消耗速率回溯点数 (多点平均)
-        self.enable_outlier_filter = False # 异常值过滤 (暂时禁用，需要测试)
-        self.outlier_threshold = 3.0       # Z-score 阈值
         self.boundary_extension = 15       # 边界扩展时间 (分钟)
         
         self.history_service = HistoryQueryService()
@@ -66,11 +85,12 @@ class FeedingAnalysisService:
             return
         self._is_running = True
         self._task = asyncio.create_task(self._scheduled_loop())
-        print(f"🚀 [FeedingService] 投料分析服务已启动")
+        print(f"🚀 [FeedingService] 投料分析服务已启动 (v2.2 固定下料速度版)")
         print(f"   ⏱️  检测频率: {self.run_interval_minutes} 分钟")
         print(f"   📊 查询窗口: {self.query_window_minutes} 分钟")
         print(f"   🎯 数据模式: {'原始数据(6秒)' if self.use_raw_data else '聚合数据'}")
         print(f"   📏 投料阈值: {self.min_feeding_threshold} kg")
+        print(f"   🔧 下料速度: 窑7654={self.feed_rate_short_hopper*3600:.1f}kg/h, 窑839={self.feed_rate_long_hopper*3600:.1f}kg/h")
 
     def stop(self):
         """停止服务"""
@@ -229,7 +249,7 @@ class FeedingAnalysisService:
 
     def _detect_and_calculate_feeding(self, records: List[Dict], device_id: str) -> List[Point]:
         """
-        核心算法: Valley-Peak-Compensation 投料检测算法 (优化版)
+        核心算法: Valley-Peak-Compensation 投料检测算法 (v2.2 固定下料速度版)
         
         算法原理:
         ┌─────────────────────────────────────────────────────────┐
@@ -250,24 +270,26 @@ class FeedingAnalysisService:
         │    │  (投料开始)                                          │
         │    └──────────────────────────────────► Time            │
         │                                                          │
-        │  计算公式:                                                │
+        │  计算公式 (v2.2 固定下料速度):                             │
         │  Total_Added = (Peak - Valley) + Compensation           │
         │                                                          │
         │  其中:                                                    │
         │  - Valley: 投料前的最低点                                 │
         │  - Peak: 投料后的最高点                                   │
         │  - Compensation: 投料过程中的消耗补偿                      │
-        │    = (PreValley - Valley) × 投料持续间隔数                │
+        │    = 固定下料速度 (kg/秒) × 投料持续时间 (秒)              │
+        │    窑7654: 10 kg/h                                       │
+        │    窑839:  22 kg/h                                       │
         └─────────────────────────────────────────────────────────┘
         
         逻辑流程:
         1. 遍历数据点，寻找上升起点 (Valley)
         2. 追踪连续上升区间 (Rising Edge)
         3. 识别峰值点 (Peak)，带前瞻机制防止波动误判
-        4. 计算消耗补偿 (基于投料前的消耗速率)
+        4. 计算消耗补偿 (使用固定下料速度)
         5. 计算总投料量 = 净增量 + 消耗补偿
-        6. 边缘保护: 跳过数据末尾未完成的投料事件
-        7. 去重机制: 基于 Valley 时间戳的天然去重
+        6. 边缘保护: 跳过数据末尾未完成的投料事件 (不存数据库)
+        7. 去重机制: 检查是否已处理过该投料事件
         
         Args:
             records: 重量数据点列表 [{"time": datetime, "value": float}, ...]
@@ -344,7 +366,7 @@ class FeedingAnalysisService:
                 # 步骤3: 边缘保护 (防止未完成的投料事件)
                 # ============================================================
                 if peak_idx >= n - 1:
-                    # 投料可能未结束，等待更多数据
+                    # 投料可能未结束，等待更多数据 (不存数据库)
                     print(f"         ⏳ {device_id}: 投料未完成 (边缘数据)，等待下次分析")
                     break
                 
@@ -356,31 +378,34 @@ class FeedingAnalysisService:
                 # 步骤4: 阈值判断
                 # ============================================================
                 if raw_increase > self.min_feeding_threshold:
-                    # 计算持续间隔数
-                    x_intervals = peak_idx - valley_idx
-                    
                     # ============================================================
-                    # 步骤5: 计算消耗补偿 (优化版 v2.1 - 多点平均)
+                    # 步骤5: 去重检查 (v2.2 - 防止重复存储)
                     # ============================================================
-                    consumption_rate = self._calculate_consumption_rate(
-                        records, valley_idx, self.consumption_lookback
-                    )
-                    
-                    compensation = consumption_rate * x_intervals
-                    total_added = raw_increase + compensation
+                    event_key = (device_id, int(valley_time.timestamp()))
+                    if event_key in self.processed_events:
+                        print(f"         ⏭️  {device_id}: 投料事件已处理 (谷底={valley_time.strftime('%H:%M:%S')})，跳过")
+                        i = peak_idx + 1
+                        continue
                     
                     # 计算投料持续时间 (秒)
                     duration_seconds = (peak_time - valley_time).total_seconds()
                     
                     # ============================================================
-                    # 步骤6: 构建 InfluxDB Point
+                    # 步骤6: 计算消耗补偿 (v2.2 - 固定下料速度)
+                    # ============================================================
+                    feed_rate = self._get_feed_rate(device_id)  # kg/秒
+                    compensation = feed_rate * duration_seconds
+                    total_added = raw_increase + compensation
+                    
+                    # ============================================================
+                    # 步骤7: 构建 InfluxDB Point
                     # ============================================================
                     p = Point("feeding_records") \
                         .tag("device_id", device_id) \
                         .field("added_weight", float(total_added)) \
                         .field("raw_increase", float(raw_increase)) \
                         .field("compensation", float(compensation)) \
-                        .field("consumption_rate", float(consumption_rate)) \
+                        .field("feed_rate_kg_per_hour", float(feed_rate * 3600)) \
                         .field("duration_seconds", int(duration_seconds)) \
                         .field("valley_weight", float(valley_val)) \
                         .field("peak_weight", float(peak_val)) \
@@ -388,12 +413,22 @@ class FeedingAnalysisService:
                     
                     events.append(p)
                     
+                    # 标记为已处理
+                    self.processed_events[event_key] = True
+                    
+                    # 清理缓存 (防止内存溢出)
+                    if len(self.processed_events) > self.max_cache_size:
+                        # 删除最旧的一半
+                        keys_to_remove = list(self.processed_events.keys())[:self.max_cache_size // 2]
+                        for key in keys_to_remove:
+                            del self.processed_events[key]
+                    
                     # 设置冷却期
                     last_peak_idx = peak_idx
                     i = peak_idx + 1
                     
                     print(f"         ✅ 投料事件: {valley_time.strftime('%H:%M:%S')} → {peak_time.strftime('%H:%M:%S')}, "
-                          f"投料量={total_added:.1f}kg (净增={raw_increase:.1f}kg, 补偿={compensation:.1f}kg, 消耗率={consumption_rate:.2f}kg/interval)")
+                          f"投料量={total_added:.1f}kg (净增={raw_increase:.1f}kg, 补偿={compensation:.1f}kg, 下料速度={feed_rate*3600:.1f}kg/h)")
                 else:
                     # 未超过阈值，继续
                     i += 1
@@ -402,110 +437,43 @@ class FeedingAnalysisService:
                 
         return events
 
-    def _calculate_consumption_rate(self, records: List[Dict], valley_idx: int, lookback: int = 5) -> float:
+    def _get_feed_rate(self, device_id: str) -> float:
         """
-        计算投料前的平均消耗速率 (优化版 v2.1)
+        获取设备的固定下料速度 (v2.2)
         
-        使用多点平均而非单点，提高准确性和抗干扰能力
+        根据设备类型返回固定的下料速度:
+        - 窑7654 (short_hopper_1/2/3/4): 10 kg/h
+        - 窑839 (long_hopper_1/2/3): 22 kg/h
         
         Args:
-            records: 数据点列表
-            valley_idx: Valley 索引
-            lookback: 回溯点数 (默认5个点)
+            device_id: 设备ID
             
         Returns:
-            float: 平均消耗速率 (kg/interval)
-            
-        示例:
-            records = [110, 109, 108, 107, 106, 100 (Valley)]
-            valley_idx = 5
-            lookback = 5
-            
-            计算:
-            - rate1 = 110 - 109 = 1 kg
-            - rate2 = 109 - 108 = 1 kg
-            - rate3 = 108 - 107 = 1 kg
-            - rate4 = 107 - 106 = 1 kg
-            - rate5 = 106 - 100 = 6 kg (异常，但会被平均稀释)
-            
-            平均消耗速率 = (1+1+1+1+6) / 5 = 2 kg/interval
-            
-            如果只用单点 (原算法):
-            消耗速率 = 106 - 100 = 6 kg/interval (错误!)
+            float: 下料速度 (kg/秒)
         """
-        if valley_idx < 1:
-            return 0.0
-        
-        # 调整回溯点数，不超过可用数据
-        actual_lookback = min(lookback, valley_idx)
-        
-        if actual_lookback < 1:
-            return 0.0
-        
-        # 计算多个区间的消耗速率
-        rates = []
-        for i in range(actual_lookback):
-            curr_idx = valley_idx - i
-            prev_idx = curr_idx - 1
-            
-            if prev_idx >= 0:
-                curr_val = records[curr_idx]['value']
-                prev_val = records[prev_idx]['value']
-                rate = prev_val - curr_val
-                
-                # 只统计下降的情况 (消耗)
-                if rate > 0:
-                    rates.append(rate)
-        
-        # 返回平均值
-        if rates:
-            avg_rate = sum(rates) / len(rates)
-            return avg_rate
+        if device_id.startswith("short_hopper"):
+            return self.feed_rate_short_hopper  # 10 kg/h
+        elif device_id.startswith("long_hopper"):
+            return self.feed_rate_long_hopper   # 22 kg/h
         else:
-            return 0.0
+            # 默认值 (不应该到这里)
+            return self.feed_rate_short_hopper
+
+    def _calculate_consumption_rate(self, records: List[Dict], valley_idx: int, lookback: int = 5) -> float:
+        """
+        计算投料前的平均消耗速率 (已废弃 - v2.2 使用固定下料速度)
+        
+        保留此方法仅为向后兼容，实际不再使用
+        """
+        return 0.0  # 不再使用动态计算
 
     def _filter_outliers(self, records: List[Dict], threshold: float = 3.0) -> List[Dict]:
         """
-        过滤异常值 (使用 Z-score 方法)
+        过滤异常值 (已废弃 - v2.2 不再使用)
         
-        Args:
-            records: 原始数据点
-            threshold: Z-score 阈值 (默认3.0，即3倍标准差)
-            
-        Returns:
-            List[Dict]: 过滤后的数据点
-            
-        说明:
-            Z-score = (x - mean) / std_dev
-            如果 |Z-score| > threshold，则认为是异常值
+        保留此方法仅为向后兼容
         """
-        if len(records) < 3:
-            return records
-        
-        # 计算均值和标准差
-        values = [r['value'] for r in records]
-        mean = sum(values) / len(values)
-        variance = sum((x - mean) ** 2 for x in values) / len(values)
-        std_dev = variance ** 0.5
-        
-        if std_dev == 0:
-            return records
-        
-        # 过滤异常值
-        filtered = []
-        outlier_count = 0
-        for record in records:
-            z_score = abs((record['value'] - mean) / std_dev)
-            if z_score <= threshold:
-                filtered.append(record)
-            else:
-                outlier_count += 1
-        
-        if outlier_count > 0:
-            print(f"      ⚠️  过滤了 {outlier_count} 个异常值")
-        
-        # 如果全部被过滤，返回原数据
-        return filtered if filtered else records
+        return records  # 不再使用异常值过滤
 
     def _save_feeding_records(self, points: List[Point]):
         """

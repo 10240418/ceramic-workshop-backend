@@ -103,7 +103,7 @@ def create_app() -> FastAPI:
     app.include_router(scr_fan.router)
     app.include_router(devices.router)
     app.include_router(status.router)
-    app.include_router(export.router)  # 包含运行时长统计
+    app.include_router(export.router)  # 包含设备运行时长
     app.include_router(daily_summary.router)  # 日汇总数据管理
     app.include_router(config.router, prefix="/api/config", tags=["系统配置"])
     

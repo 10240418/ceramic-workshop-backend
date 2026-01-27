@@ -112,8 +112,21 @@ class DailySummaryService:
                 devices_processed += 1
         
         # 1.2 处理辊道窑6个分区
+        # 🔧 修复：将 roller_kiln_zones 的 device_id 映射为 zone1~zone6
+        zone_mapping = {
+            "roller_kiln_1_zone1": "zone1",
+            "roller_kiln_1_zone2": "zone2",
+            "roller_kiln_1_zone3": "zone3",
+            "roller_kiln_1_zone4": "zone4",
+            "roller_kiln_1_zone5": "zone5",
+            "roller_kiln_1_zone6": "zone6",
+        }
+        
         for zone in electricity_data["roller_kiln_zones"]:
-            device_id = zone["device_id"]
+            original_device_id = zone["device_id"]
+            # 🔧 映射为 V3 期望的 device_id
+            device_id = zone_mapping.get(original_device_id, original_device_id)
+            
             if zone["daily_records"]:
                 record = zone["daily_records"][0]
                 
@@ -149,8 +162,17 @@ class DailySummaryService:
             devices_processed += 1
         
         # 1.4 处理SCR氨水泵
+        # 🔧 修复：将 scr_devices 的 device_id 映射为 scr_1_pump, scr_2_pump
+        scr_mapping = {
+            "scr_1_meter": "scr_1_pump",
+            "scr_2_meter": "scr_2_pump",
+        }
+        
         for scr in electricity_data["scr_devices"]:
-            device_id = scr["device_id"]
+            original_device_id = scr["device_id"]
+            # 🔧 映射为 V3 期望的 device_id
+            device_id = scr_mapping.get(original_device_id, original_device_id)
+            
             if scr["daily_records"]:
                 record = scr["daily_records"][0]
                 

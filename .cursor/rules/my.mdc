@@ -1001,15 +1001,5 @@ data/cache.db
 - **python-snap7**: https://python-snap7.readthedocs.io/
 - **Pydantic**: https://docs.pydantic.dev/
 
-### 项目信息
-
-```yaml
-版本: 1.0.0
-维护者: Ceramic Workshop Team
-最后更新: 2026-01-26
-Python 版本: 3.12+
-```
-
----
-
-**🎉 规范文档整理完成！现在可以开始启动后端进行测试了。**
+- 我的本地开发机器为windows11 ,工控机也是windows10,命令行使用powershell的格式的命令行.切记.
+- 对于测试的话,可以docker compose restart 后使用docker exec等powershell来测试,测试完毕以后删除测试文件和md文件.直接使用 Python 在容器内执行测试.测试文件文件不在容器内，先复制进去.
