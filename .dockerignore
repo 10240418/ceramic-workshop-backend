@@ -30,3 +30,4 @@ docs/
 # 忽略测试脚本（生产环境不需要）
 # 🔧 [IMPORTANT] 保留 tests/mock/ 目录供 Mock 模式使用
 scripts/
+vdoc/

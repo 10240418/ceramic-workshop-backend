@@ -594,6 +594,81 @@ class DataExportService:
             print(f"⚠️  计算 {device_id} 燃气表运行时长失败: {str(e)}")
             return 0.0
     
+    def _calculate_scr_pump_electricity_by_day(
+        self,
+        device_id: str,
+        pump_id: str,
+        start_time: datetime,
+        end_time: datetime
+    ) -> Dict[str, Any]:
+        """计算SCR氨水泵电量消耗按天统计（使用 module_tag=meter）
+        
+        Args:
+            device_id: 设备ID（scr_1 或 scr_2）
+            pump_id: 氨水泵ID（scr_1_pump 或 scr_2_pump）
+            start_time: 开始时间（UTC）
+            end_time: 结束时间（UTC）
+            
+        Returns:
+            {
+                "device_id": "scr_1_pump",
+                "device_type": "scr_pump",
+                "total_days": 3,
+                "daily_records": [...]
+            }
+        """
+        daily_records = []
+        
+        # 按天分割时间段
+        current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_count = 0
+        
+        while current_date < end_time:
+            day_count += 1
+            day_start = max(current_date, start_time)
+            day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
+            
+            # 查询当天的起始读数和结束读数（使用 device_id=scr_1/scr_2 + module_tag=meter）
+            start_reading = self._get_electricity_reading_at_time(
+                device_id, day_start, module_tag="meter"
+            )
+            end_reading = self._get_electricity_reading_at_time(
+                device_id, day_end, module_tag="meter"
+            )
+            
+            # 计算消耗
+            consumption = 0.0
+            if end_reading is not None:
+                start_value = start_reading if start_reading is not None else 0.0
+                consumption = round(end_reading - start_value, 2)
+                if consumption < 0:
+                    consumption = round(end_reading, 2)
+            
+            # 计算运行时长（使用 device_id=scr_1/scr_2 + module_tag=meter）
+            runtime_hours = self._calculate_runtime_for_period(
+                device_id, day_start, day_end, module_tag="meter"
+            )
+            
+            daily_records.append({
+                "day": day_count,
+                "date": current_date.strftime("%Y-%m-%d"),
+                "start_time": self._format_timestamp(day_start),
+                "end_time": self._format_timestamp(day_end),
+                "start_reading": round(start_reading, 2) if start_reading is not None else None,
+                "end_reading": round(end_reading, 2) if end_reading is not None else None,
+                "consumption": consumption,
+                "runtime_hours": runtime_hours
+            })
+            
+            current_date += timedelta(days=1)
+        
+        return {
+            "device_id": pump_id,  # 返回 scr_1_pump/scr_2_pump 作为 device_id
+            "device_type": "scr_pump",
+            "total_days": day_count,
+            "daily_records": daily_records
+        }
+    
     # ------------------------------------------------------------
     # 4. calculate_all_devices_electricity_by_day() - 所有设备电量统计
     # ------------------------------------------------------------
@@ -687,12 +762,15 @@ class DataExportService:
         
         result["roller_kiln_total"] = total_data
         
-        # 4. SCR设备（氨泵）
-        scr_ids = ["scr_1_pump", "scr_2_pump"]
-        for scr_id in scr_ids:
-            data = self.calculate_electricity_consumption_by_day(
-                device_id=scr_id,
-                device_type="scr_pump",
+        # 4. SCR设备（氨泵）- 使用 scr_1/scr_2 + module_tag=meter
+        scr_configs = [
+            {"device_id": "scr_1", "pump_id": "scr_1_pump"},
+            {"device_id": "scr_2", "pump_id": "scr_2_pump"}
+        ]
+        for config in scr_configs:
+            data = self._calculate_scr_pump_electricity_by_day(
+                device_id=config["device_id"],
+                pump_id=config["pump_id"],
                 start_time=start_time,
                 end_time=end_time
             )
@@ -1169,12 +1247,15 @@ class DataExportService:
                 "daily_records": daily_records
             })
         
-        # 4.4 处理SCR氨水泵 - 只有电量和运行时长
-        scr_pump_ids = ["scr_1_pump", "scr_2_pump"]
-        for pump_id in scr_pump_ids:
-            pump_data = self.calculate_electricity_consumption_by_day(
-                device_id=pump_id,
-                device_type="scr_pump",
+        # 4.4 处理SCR氨水泵 - 使用 scr_1/scr_2 + module_tag=meter
+        scr_pump_configs = [
+            {"device_id": "scr_1", "pump_id": "scr_1_pump"},
+            {"device_id": "scr_2", "pump_id": "scr_2_pump"}
+        ]
+        for config in scr_pump_configs:
+            pump_data = self._calculate_scr_pump_electricity_by_day(
+                device_id=config["device_id"],
+                pump_id=config["pump_id"],
                 start_time=start_time,
                 end_time=end_time
             )
@@ -1192,7 +1273,7 @@ class DataExportService:
                 })
             
             devices.append({
-                "device_id": pump_id,
+                "device_id": config["pump_id"],
                 "device_type": "scr_pump",
                 "daily_records": daily_records
             })

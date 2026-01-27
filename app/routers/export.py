@@ -27,6 +27,8 @@ from typing import Optional, List
 
 from app.models.response import ApiResponse
 from app.services.data_export_service import get_export_service
+from app.services.data_export_service_v2 import get_export_service_v2
+from app.utils.time_slice_utils import parse_days_parameter
 
 router = APIRouter(prefix="/api/export", tags=["数据导出统计"])
 
@@ -413,7 +415,8 @@ async def export_all_electricity_consumption(
 async def export_comprehensive_data(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
-    days: Optional[int] = Query(7, description="查询最近N天（如果未指定start_time和end_time）")
+    days: Optional[int] = Query(None, description="查询最近N天（如果未指定start_time和end_time）"),
+    use_optimized: Optional[bool] = Query(True, description="是否使用优化版本（预计算数据）")
 ):
     """综合导出所有设备的所有数据（按天统计）
     
@@ -432,8 +435,16 @@ async def export_comprehensive_data(
     
     **时间参数**:
     - 方式1: 指定 start_time 和 end_time（ISO 8601格式）
-    - 方式2: 使用 days 参数查询最近N天（默认7天）
+    - 方式2: 使用 days 参数查询最近N天
+      - days=1: 今天0点到现在
+      - days=2: 昨天0点到今天现在
+      - days=N: N-1天前0点到今天现在
     - **建议**: 最多查询30天，避免查询时间过长
+    
+    **优化参数**:
+    - use_optimized: 是否使用优化版本（默认true）
+      - true: 使用预计算数据（快速，推荐）
+      - false: 实时计算（慢，用于调试）
     
     **返回结构**:
     ```json
@@ -474,18 +485,25 @@ async def export_comprehensive_data(
     
     **示例**:
     ```
-    # 查询最近7天所有数据
-    GET /api/export/comprehensive
+    # 查询今天的数据（优化版）
+    GET /api/export/comprehensive?days=1
     
-    # 查询最近30天所有数据
+    # 查询最近7天所有数据（优化版）
+    GET /api/export/comprehensive?days=7
+    
+    # 查询最近30天所有数据（优化版）
     GET /api/export/comprehensive?days=30
     
-    # 查询指定时间段所有数据
+    # 查询指定时间段所有数据（优化版）
     GET /api/export/comprehensive?start_time=2026-01-01T00:00:00Z&end_time=2026-01-31T23:59:59Z
+    
+    # 使用旧版本（实时计算，慢）
+    GET /api/export/comprehensive?days=7&use_optimized=false
     ```
     
     **性能提示**:
-    - 该接口会查询多个数据源，查询时间较长
+    - 优化版本（use_optimized=true）: 速度快，推荐使用
+    - 旧版本（use_optimized=false）: 速度慢，仅用于调试
     - 建议限制查询天数（≤30天）
     - 前端应显示加载提示
     """
@@ -494,21 +512,33 @@ async def export_comprehensive_data(
         if start_time and end_time:
             start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
             end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+        elif days is not None:
+            # 使用 days 参数（按自然日切分）
+            start_dt, end_dt = parse_days_parameter(days)
         else:
-            end_dt = datetime.now(timezone.utc)
-            start_dt = end_dt - timedelta(days=days)
+            # 默认查询最近7天
+            start_dt, end_dt = parse_days_parameter(7)
         
         # 限制查询天数（最多30天）
         time_diff = end_dt - start_dt
         if time_diff.days > 30:
             return ApiResponse.fail("查询时间范围不能超过30天，请缩小时间范围")
         
-        # 调用服务计算综合数据
-        service = get_export_service()
-        result = service.calculate_all_data_comprehensive(
-            start_time=start_dt,
-            end_time=end_dt
-        )
+        # 选择服务版本
+        if use_optimized:
+            # 使用优化版本（预计算数据）
+            service = get_export_service_v2()
+            result = service.export_comprehensive_optimized(
+                start_time=start_dt,
+                end_time=end_dt
+            )
+        else:
+            # 使用旧版本（实时计算）
+            service = get_export_service()
+            result = service.calculate_all_data_comprehensive(
+                start_time=start_dt,
+                end_time=end_dt
+            )
         
         return ApiResponse.ok(result)
     

@@ -205,6 +205,34 @@ MODULE_DATA_SCHEMA = MeasurementSchema(
     ]
 )
 
+# 日汇总数据表 (预计算优化)
+DAILY_SUMMARY_SCHEMA = MeasurementSchema(
+    name="daily_summary",
+    description="日汇总数据（预计算，用于导出优化）",
+    retention=RetentionPeriod.INFINITE,
+    tags=[
+        "device_id",       # 设备ID
+        "device_type",     # 设备类型 (hopper, roller_kiln_zone, roller_kiln_total, scr_gas_meter, scr_pump, fan)
+        "date",            # 日期 (YYYYMMDD)
+        "metric_type",     # 指标类型 (electricity, gas, feeding, runtime)
+    ],
+    fields=[
+        # 电量相关
+        FieldDefinition("start_reading", "float", "起始读数", "kWh/m³/kg"),
+        FieldDefinition("end_reading", "float", "结束读数", "kWh/m³/kg"),
+        FieldDefinition("consumption", "float", "当日消耗", "kWh/m³/kg"),
+        
+        # 运行时长
+        FieldDefinition("runtime_hours", "float", "运行时长", "h"),
+        
+        # 投料量
+        FieldDefinition("feeding_amount", "float", "投料量", "kg"),
+        
+        # 燃气消耗
+        FieldDefinition("gas_consumption", "float", "燃气消耗", "m³"),
+    ]
+)
+
 # ============================================================
 # 所有 Schema 定义（注册表）
 # ============================================================
@@ -228,6 +256,9 @@ ALL_SCHEMAS: List[MeasurementSchema] = [
     
     # 模块化数据 (新增)
     MODULE_DATA_SCHEMA,
+    
+    # 日汇总数据 (预计算优化)
+    DAILY_SUMMARY_SCHEMA,
 ]
 
 

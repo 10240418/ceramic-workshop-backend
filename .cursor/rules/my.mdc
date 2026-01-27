@@ -4,7 +4,7 @@ alwaysApply: true
 
 # 🏭 Ceramic Workshop Backend - 开发规范
 
-> **陶瓷车间数字孪生系统后端 API** - FastAPI + InfluxDB + S7-1200 PLC
+> **磨料车间后端 API** - FastAPI + InfluxDB + S7-1200 PLC
 
 ---
 
@@ -953,19 +953,7 @@ BATCH_WRITE_SIZE=10
 
 ---
 
-## 🎯 12. 快速参考
 
-### 关键文件速查
-
-| 文件 | 用途 | 修改频率 |
-|-----|------|---------|
-| `main.py` | 应用入口 | 低 |
-| `config.py` | 配置管理 | 中 |
-| `app/routers/*.py` | API 路由 | 高 |
-| `app/services/polling_service.py` | 轮询服务 | 中 |
-| `app/plc/parser_*.py` | 数据解析 | 高 |
-| `app/tools/converter_*.py` | 数据转换 | 中 |
-| `configs/*.yaml` | 设备配置 | 高 |
 
 ### 常用 API 速查
 
