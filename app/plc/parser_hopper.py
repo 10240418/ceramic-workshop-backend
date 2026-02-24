@@ -41,7 +41,7 @@ class HopperParser:
             module_config_path: 基础模块配置文件路径
         """
         # 使用绝对路径，避免工作目录问题
-        self.db_config_path = Path(db_config_path) if db_config_path else self.PROJECT_ROOT / "configs" / "config_hoppers_8.yaml"
+        self.db_config_path = Path(db_config_path) if db_config_path else self.PROJECT_ROOT / "configs" / "config_hopper_8.yaml"
         self.module_config_path = Path(module_config_path) if module_config_path else self.PROJECT_ROOT / "configs" / "plc_modules.yaml"
         
         self.db_config = None
@@ -79,7 +79,7 @@ class HopperParser:
                 device['category'] = 'long_hopper'
                 self.devices.append(device)
         
-        print(f"✅ DB6解析器初始化完成: {len(self.devices)}个设备, DB{self.db_config['db_number']}, 总大小{self.db_config['total_size']}字节")
+        print(f"[OK] DB6解析器初始化完成: {len(self.devices)}个设备, DB{self.db_config['db_number']}, 总大小{self.db_config['total_size']}字节")
     
     # ------------------------------------------------------------
     # 3. parse_module() - 解析单个模块数据
@@ -141,7 +141,7 @@ class HopperParser:
                 }
             
             except Exception as e:
-                print(f"⚠️  解析字段失败 {module_type}.{field_name} @ offset {offset + field_offset}: {e}")
+                print(f"[WARN]  解析字段失败 {module_type}.{field_name} @ offset {offset + field_offset}: {e}")
                 parsed_fields[field_name] = {
                     'value': 0.0,
                     'display_name': field.get('display_name', field_name),
@@ -190,7 +190,7 @@ class HopperParser:
                 results.append(device_result)
             
             except Exception as e:
-                print(f"⚠️  解析设备失败 {device['device_id']}: {e}")
+                print(f"[WARN]  解析设备失败 {device['device_id']}: {e}")
         
         return results
     
