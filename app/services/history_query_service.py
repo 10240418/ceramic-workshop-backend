@@ -19,12 +19,12 @@ from functools import lru_cache
 
 from config import get_settings
 from app.core.influxdb import get_influx_client
-from app.core.timezone_utils import to_beijing, beijing_isoformat, BEIJING_TZ
+from app.tools.timezone_tools import to_beijing, beijing_isoformat, BEIJING_TZ
 
 settings = get_settings()
 
 
-# 🔧 单例实例
+# [FIX] 单例实例
 _history_service_instance: Optional['HistoryQueryService'] = None
 
 
@@ -32,9 +32,11 @@ class HistoryQueryService:
     """历史数据查询服务（单例模式）"""
     
     def __init__(self):
-        self._client = None  # 🔧 延迟初始化
+        self._client = None  # [FIX] 延迟初始化
         self._query_api = None
+        # [CRITICAL] 使用环境变量配置的 bucket
         self.bucket = settings.influx_bucket
+        self.org = settings.influx_org
     
     @property
     def client(self):
@@ -46,7 +48,7 @@ class HistoryQueryService:
     @property
     def query_api(self):
         """延迟获取 query_api，确保使用最新的 client"""
-        # 🔧 每次都从当前 client 获取，避免旧 client 过期
+        # [FIX] 每次都从当前 client 获取，避免旧 client 过期
         return self.client.query_api()
     
     # ------------------------------------------------------------
@@ -78,7 +80,7 @@ class HistoryQueryService:
             
             return latest_time
         except Exception as e:
-            print(f"⚠️  获取最新时间戳失败: {str(e)}")
+            print(f"[WARN]  获取最新时间戳失败: {str(e)}")
             return None
     
     # ------------------------------------------------------------
@@ -124,7 +126,7 @@ class HistoryQueryService:
             return None
         except Exception as e:
             # 静默失败，避免刷屏日志
-            # print(f"⚠️  查询历史重量失败: {str(e)}")
+            # print(f"[WARN]  查询历史重量失败: {str(e)}")
             return None
 
     # ------------------------------------------------------------
@@ -180,7 +182,7 @@ class HistoryQueryService:
             return device_list
         except Exception as e:
             # 查询失败时，返回兜底列表
-            print(f"⚠️  设备列表查询失败: {str(e)}，返回兜底数据")
+            print(f"[WARN]  设备列表查询失败: {str(e)}，返回兜底数据")
             return self._get_fallback_device_list(device_type)
     
     def _get_fallback_device_list(self, device_type: Optional[str] = None) -> List[Dict[str, Any]]:
@@ -275,7 +277,7 @@ class HistoryQueryService:
         }
     
     # ------------------------------------------------------------
-    # 2. query_device_history() - 查询设备历史数据
+    # 2. query_device_history() - 查询设备历史数据（支持动态聚合）
     # ------------------------------------------------------------
     def query_device_history(
         self,
@@ -285,9 +287,10 @@ class HistoryQueryService:
         module_type: Optional[str] = None,
         module_tag: Optional[str] = None,
         fields: Optional[List[str]] = None,
-        interval: str = "1m"
+        interval: Optional[str] = None,
+        auto_interval: bool = True
     ) -> List[Dict[str, Any]]:
-        """查询设备历史数据
+        """查询设备历史数据（支持动态聚合间隔）
         
         Args:
             device_id: 设备ID
@@ -296,7 +299,8 @@ class HistoryQueryService:
             module_type: 可选，过滤模块类型 (如 TemperatureSensor)
             module_tag: 可选，过滤模块标签 (如 temp, zone1_temp)
             fields: 可选，指定字段列表 (如 ["Temperature", "Pt"])
-            interval: 聚合间隔 (如 1m, 5m, 1h)
+            interval: 聚合间隔 (如 1m, 5m, 1h)，如果为 None 则自动计算
+            auto_interval: 是否自动计算最佳聚合间隔（默认 True）
             
         Returns:
             [
@@ -324,7 +328,7 @@ class HistoryQueryService:
         
         filter_str = ' and '.join(filters)
         
-        # 🔧 修复时区转换逻辑：检查输入时间是否已有时区信息
+        # [FIX] 修复时区转换逻辑：检查输入时间是否已有时区信息
         def to_utc(dt: datetime) -> datetime:
             if dt.tzinfo is None:
                 # 无时区信息，默认视为北京时间
@@ -336,9 +340,16 @@ class HistoryQueryService:
         start_utc = to_utc(start)
         end_utc = to_utc(end)
         
+        # [NEW] 动态计算最佳聚合间隔
+        if auto_interval and interval is None:
+            interval = self._calculate_optimal_interval(start_utc, end_utc)
+        elif interval is None:
+            interval = "1m"  # 默认值
+        
         query = f'''
         from(bucket: "{self.bucket}")
             |> range(start: {start_utc.isoformat()}Z, stop: {end_utc.isoformat()}Z)
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
             |> filter(fn: (r) => {filter_str})
             |> aggregateWindow(every: {interval}, fn: mean, createEmpty: false)
             |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
@@ -377,18 +388,19 @@ class HistoryQueryService:
         interval: str = "1m"
     ) -> List[Dict[str, Any]]:
         """查询设备温度历史数据（便捷方法）"""
+        # [FIX] 存储字段为 temperature (lowercase)，converter_temp.py 输出为小写
         return self.query_device_history(
             device_id=device_id,
             start=start,
             end=end,
             module_type="TemperatureSensor",
             module_tag=module_tag,
-            fields=["Temperature", "SetPoint"],
+            fields=["temperature"],
             interval=interval
         )
     
     # ------------------------------------------------------------
-    # 5. query_power_history() - 查询功率历史
+    # 5. query_power_history() - 查询功率和电流历史
     # ------------------------------------------------------------
     def query_power_history(
         self,
@@ -398,14 +410,19 @@ class HistoryQueryService:
         module_tag: Optional[str] = None,
         interval: str = "1m"
     ) -> List[Dict[str, Any]]:
-        """查询设备功率历史数据（便捷方法）"""
+        """查询设备功率/电流历史数据（便捷方法）
+        
+        存储字段: Pt (功率), ImpEp (能耗), Ua_0 (A相电压), I_0/I_1/I_2 (三相电流)
+        """
+        # [FIX] 存储字段为 Pt, ImpEp, Ua_0, I_0, I_1, I_2 (convert_for_storage 输出)
+        # Uab_0/1/2 (线电压) 不存储，不要查询
         return self.query_device_history(
             device_id=device_id,
             start=start,
             end=end,
             module_type="ElectricityMeter",
             module_tag=module_tag,
-            fields=["Pt", "ImpEp"],
+            fields=["Pt", "ImpEp", "Ua_0", "I_0", "I_1", "I_2"],
             interval=interval
         )
 
@@ -440,12 +457,13 @@ class HistoryQueryService:
         end_utc = to_utc(end)
 
         # 构造 Flux 查询 (倒序取最新)
+        # [FIX] 兼容新旧字段名: v5.0 写 "amount", 旧版/backfill 写 "added_weight"
         query = f'''
         from(bucket: "{self.bucket}")
             |> range(start: {start_utc.isoformat()}Z, stop: {end_utc.isoformat()}Z)
             |> filter(fn: (r) => r["_measurement"] == "feeding_records")
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
-            |> filter(fn: (r) => r["_field"] == "added_weight")
+            |> filter(fn: (r) => r["_field"] == "amount" or r["_field"] == "added_weight")
             |> sort(columns: ["_time"], desc: true)
             |> limit(n: {limit})
         '''
@@ -455,8 +473,8 @@ class HistoryQueryService:
         for table in result:
             for record in table.records:
                 records.append({
-                    "time": to_beijing(record.get_time()).isoformat(), # 转回北京时间方便前端
-                    "added_weight": record.get_value(),
+                    "time": to_beijing(record.get_time()).isoformat(),
+                    "amount": record.get_value(),  # 统一使用 amount
                     "device_id": device_id
                 })
         
@@ -465,16 +483,81 @@ class HistoryQueryService:
         records.sort(key=lambda x: x["time"])
         
         return records
-        """查询设备功率历史数据（便捷方法）"""
-        return self.query_device_history(
-            device_id=device_id,
-            start=start,
-            end=end,
-            module_type="ElectricityMeter",
-            module_tag=module_tag,
-            fields=["Pt", "Uab_0", "Uab_1", "Uab_2", "I_0", "I_1", "I_2"],
-            interval=interval
-        )
+
+    # ------------------------------------------------------------
+    # 6.1 query_feeding_cumulative_history() - 查询下料速度/投料总量历史
+    # ------------------------------------------------------------
+    def query_feeding_cumulative_history(
+        self,
+        device_id: str,
+        start: datetime,
+        end: datetime,
+        fields: Optional[List[str]] = None,
+        interval: Optional[str] = None,
+        auto_interval: bool = True,
+    ) -> List[Dict[str, Any]]:
+        """查询 feeding_cumulative measurement 的历史数据
+        
+        存储了 display_feed_rate (下料速度) 和 feeding_total (投料总量)
+        
+        Args:
+            device_id: 设备ID
+            start: 开始时间 (Naive Beijing Time or Aware)
+            end: 结束时间
+            fields: 查询字段, 默认 ["display_feed_rate", "feeding_total"]
+            interval: 聚合间隔
+            auto_interval: 是否自动计算间隔
+            
+        Returns:
+            [{ "time": "...", "display_feed_rate": 12.5, "feeding_total": 350.0 }, ...]
+        """
+        if fields is None:
+            fields = ["display_feed_rate", "feeding_total"]
+        
+        # 时区转换
+        def to_utc(dt: datetime) -> datetime:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=BEIJING_TZ)
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        
+        start_utc = to_utc(start)
+        end_utc = to_utc(end)
+        
+        # 计算聚合间隔
+        if auto_interval and interval is None:
+            interval = self._calculate_optimal_interval(start_utc, end_utc)
+        elif interval is None:
+            interval = "1m"
+        
+        # 构建字段过滤
+        field_conditions = ' or '.join([f'r["_field"] == "{f}"' for f in fields])
+        
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {start_utc.isoformat()}Z, stop: {end_utc.isoformat()}Z)
+            |> filter(fn: (r) => r["_measurement"] == "feeding_cumulative")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            |> filter(fn: (r) => {field_conditions})
+            |> aggregateWindow(every: {interval}, fn: mean, createEmpty: false)
+            |> pivot(rowKey:["_time"], columnKey: ["_field"], valueColumn: "_value")
+        '''
+        
+        result = self.query_api.query(query)
+        
+        data = []
+        for table in result:
+            for record in table.records:
+                row = {"time": to_beijing(record.get_time()).isoformat()}
+                for f in fields:
+                    val = record.values.get(f)
+                    if val is not None:
+                        row[f] = round(float(val), 2) if isinstance(val, (int, float)) else val
+                data.append(row)
+        
+        # 按时间升序
+        data.sort(key=lambda x: x["time"])
+        # [FIX] 返回 (data, interval) tuple，调用方需解包
+        return data, interval
     
     # ------------------------------------------------------------
     # 6. query_weight_history() - 查询称重历史
@@ -487,14 +570,18 @@ class HistoryQueryService:
         module_tag: Optional[str] = None,
         interval: str = "1m"
     ) -> List[Dict[str, Any]]:
-        """查询设备称重历史数据（便捷方法）"""
+        """查询设备称重历史数据（便捷方法）
+        
+        存储字段: weight (实时重量), is_stable (稳定标志), is_overload (超载标志)
+        """
+        # [FIX] 存储字段为 weight (converter_weight.py 输出)，不是 GrossWeight/NetWeight
         return self.query_device_history(
             device_id=device_id,
             start=start,
             end=end,
             module_type="WeighSensor",
             module_tag=module_tag,
-            fields=["GrossWeight", "NetWeight", "TareWeight"],
+            fields=["weight"],
             interval=interval
         )
     
@@ -541,7 +628,7 @@ class HistoryQueryService:
         
         filter_str = ' and '.join(filters)
         
-        # 🔧 修复时区转换逻辑：检查输入时间是否已有时区信息
+        # [FIX] 修复时区转换逻辑：检查输入时间是否已有时区信息
         # 如果无时区信息，默认视为北京时间 (因为前端通常传北京时间)
         if start.tzinfo is None:
             start = start.replace(tzinfo=BEIJING_TZ)
@@ -610,10 +697,84 @@ class HistoryQueryService:
                     }
         
         return list(devices.values())
+    
+    # ------------------------------------------------------------
+    # 9. _calculate_optimal_interval() - 动态计算最佳聚合间隔
+    # ------------------------------------------------------------
+    def _calculate_optimal_interval(self, start: datetime, end: datetime) -> str:
+        """根据时间范围动态计算最佳聚合间隔
+        
+        目标：保持返回的数据点数在 40-150 之间，理想值为 80 点
+        
+        Args:
+            start: 开始时间（UTC）
+            end: 结束时间（UTC）
+            
+        Returns:
+            聚合间隔字符串（如 "5s", "1m", "5m", "1h"）
+        """
+        # 目标数据点数
+        target_points = 80
+        min_points = 40
+        max_points = 150
+        
+        # 有效的聚合间隔（秒）
+        valid_intervals = [
+            5, 10, 15, 30,           # 秒级
+            60, 120, 180, 300, 600, 900, 1800,  # 分钟级
+            3600, 7200, 14400, 21600, 43200,    # 小时级
+            86400, 172800, 259200, 604800       # 天级
+        ]
+        
+        # 计算时间范围（秒）
+        duration = (end - start).total_seconds()
+        
+        if duration <= 0:
+            return "5s"
+        
+        # 计算理想间隔
+        ideal_interval = duration / target_points
+        
+        # 找到最接近理想值且在合理范围内的间隔
+        best_interval = valid_intervals[0]
+        min_diff = float('inf')
+        
+        for interval in valid_intervals:
+            estimated_points = duration / interval
+            
+            # 优先选择在合理范围内的间隔
+            if min_points <= estimated_points <= max_points:
+                diff = abs(estimated_points - target_points)
+                if diff < min_diff:
+                    min_diff = diff
+                    best_interval = interval
+        
+        # 如果没有找到合理范围内的，选择最接近理想值的
+        if min_diff == float('inf'):
+            min_diff = float('inf')
+            for interval in valid_intervals:
+                diff = abs(interval - ideal_interval)
+                if diff < min_diff:
+                    min_diff = diff
+                    best_interval = interval
+        
+        # 格式化为 InfluxDB 间隔字符串
+        return self._format_interval(best_interval)
+    
+    def _format_interval(self, seconds: int) -> str:
+        """将秒数格式化为 InfluxDB 间隔字符串"""
+        if seconds < 60:
+            return f"{seconds}s"
+        elif seconds < 3600:
+            return f"{seconds // 60}m"
+        elif seconds < 86400:
+            return f"{seconds // 3600}h"
+        else:
+            return f"{seconds // 86400}d"
 
 
 # ============================================================
-# 🔧 获取单例服务实例
+# [FIX] 获取单例服务实例
 # ============================================================
 def get_history_service() -> HistoryQueryService:
     """获取历史查询服务单例"""
@@ -622,42 +783,3 @@ def get_history_service() -> HistoryQueryService:
         _history_service_instance = HistoryQueryService()
     return _history_service_instance
 
-
-# ============================================================
-# 使用示例
-# ============================================================
-if __name__ == "__main__":
-    service = get_history_service()  # 🔧 使用单例获取函数
-    
-    # 测试查询实时数据
-    print("=== 测试查询实时数据 ===")
-    realtime = service.query_device_realtime("short_hopper_1")
-    print(f"设备: {realtime['device_id']}")
-    print(f"时间: {realtime['timestamp']}")
-    print(f"模块数: {len(realtime['modules'])}")
-    
-    # 测试查询历史温度
-    print("\n=== 测试查询历史温度 ===")
-    end_time = datetime.now()
-    start_time = end_time - timedelta(hours=1)
-    
-    history = service.query_temperature_history(
-        device_id="roller_kiln_1",
-        start=start_time,
-        end=end_time,
-        module_tag="zone1_temp",
-        interval="5m"
-    )
-    print(f"查询到 {len(history)} 条数据")
-    
-    # 测试多设备对比
-    print("\n=== 测试多设备温度对比 ===")
-    compare = service.query_multi_device_compare(
-        device_ids=["short_hopper_1", "short_hopper_2", "short_hopper_3"],
-        field="Temperature",
-        start=start_time,
-        end=end_time,
-        module_type="TemperatureSensor",
-        interval="5m"
-    )
-    print(f"对比数据点: {len(compare)} 个")

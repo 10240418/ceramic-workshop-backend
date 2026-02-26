@@ -104,7 +104,7 @@ class PLCConfigManager:
         
         # 兼容空配置文件（使用新的模块化配置系统）
         if raw_config is None or not isinstance(raw_config, dict):
-            print("⚠️  使用新的模块化配置系统 (plc_modules.yaml)")
+            print("[WARN]  使用新的模块化配置系统 (plc_modules.yaml)")
             return
         
         # 解析每个设备的配置
@@ -131,7 +131,7 @@ class PLCConfigManager:
                     )
                     data_points.append(data_point)
                 except Exception as e:
-                    print(f"⚠️  解析数据点失败: {point_data.get('name', 'unknown')} - {e}")
+                    print(f"[WARN]  解析数据点失败: {point_data.get('name', 'unknown')} - {e}")
             
             # 创建设备配置
             self.config[device_key] = DeviceConfig(
@@ -279,7 +279,7 @@ class PLCConfigManager:
             是否成功
         """
         if device_type not in self.config:
-            print(f"❌ 设备类型不存在: {device_type}")
+            print(f"[ERROR] 设备类型不存在: {device_type}")
             return False
         
         try:
@@ -304,11 +304,11 @@ class PLCConfigManager:
             # 保存到文件
             self._save_config()
             
-            print(f"✅ 数据点添加成功: {data_point.name}")
+            print(f"[OK] 数据点添加成功: {data_point.name}")
             return True
             
         except Exception as e:
-            print(f"❌ 添加数据点失败: {e}")
+            print(f"[ERROR] 添加数据点失败: {e}")
             return False
     
     # ------------------------------------------------------------
@@ -331,7 +331,7 @@ class PLCConfigManager:
             是否成功
         """
         if device_type not in self.config:
-            print(f"❌ 设备类型不存在: {device_type}")
+            print(f"[ERROR] 设备类型不存在: {device_type}")
             return False
         
         # 查找数据点
@@ -342,7 +342,7 @@ class PLCConfigManager:
                 break
         
         if not point:
-            print(f"❌ 数据点不存在: {point_id}")
+            print(f"[ERROR] 数据点不存在: {point_id}")
             return False
         
         # 更新字段
@@ -355,7 +355,7 @@ class PLCConfigManager:
         # 保存到文件
         self._save_config()
         
-        print(f"✅ 数据点更新成功: {point.name}")
+        print(f"[OK] 数据点更新成功: {point.name}")
         return True
     
     # ------------------------------------------------------------
@@ -363,10 +363,10 @@ class PLCConfigManager:
     # ------------------------------------------------------------
     def reload_config(self):
         """重新加载配置文件（热重载）"""
-        print("🔄 重新加载配置...")
+        print("[...] 重新加载配置...")
         self.config.clear()
         self._load_config()
-        print("✅ 配置重载完成")
+        print("[OK] 配置重载完成")
     
     def _save_config(self):
         """保存配置到文件"""
@@ -457,7 +457,7 @@ if __name__ == "__main__":
     command = sys.argv[1]
     
     if command == "summary":
-        print("\n📊 配置摘要\n")
+        print("\n 配置摘要\n")
         summary = manager.get_summary()
         data = [[k, v['device_type'], v['db_number'], 
                 v['enabled_points'], v['total_points']] 
@@ -467,21 +467,21 @@ if __name__ == "__main__":
         ], tablefmt="grid"))
     
     elif command == "validate":
-        print("\n🔍 验证配置\n")
+        print("\n 验证配置\n")
         errors = manager.validate_config()
         if not errors:
-            print("✅ 配置验证通过")
+            print("[OK] 配置验证通过")
         else:
             for device, error_list in errors.items():
-                print(f"\n❌ {device}:")
+                print(f"\n[ERROR] {device}:")
                 for err in error_list:
                     print(f"  - {err}")
     
     elif command == "schema":
-        print("\n📋 InfluxDB Schema\n")
+        print("\n InfluxDB Schema\n")
         schema = manager.generate_schema()
         for name, info in schema.items():
-            print(f"\n📊 {name}")
+            print(f"\n {name}")
             print(f"  Tags: {', '.join(info['tags']) if info['tags'] else '无'}")
             print(f"  Fields:")
             for field, field_info in info['fields'].items():
@@ -489,17 +489,17 @@ if __name__ == "__main__":
     
     elif command == "list":
         if len(sys.argv) < 3:
-            print("❌ 请指定设备类型")
+            print("[ERROR] 请指定设备类型")
             sys.exit(1)
         
         device_type = sys.argv[2]
         points = manager.get_device_points(device_type)
         
         if not points:
-            print(f"❌ 设备类型不存在或无数据点: {device_type}")
+            print(f"[ERROR] 设备类型不存在或无数据点: {device_type}")
             sys.exit(1)
         
-        print(f"\n📋 {device_type} 数据点列表\n")
+        print(f"\n {device_type} 数据点列表\n")
         data = [[p.name, p.point_id, p.db_offset, p.data_type.value, 
                 p.scale, p.unit, p.measurement] 
                 for p in points]

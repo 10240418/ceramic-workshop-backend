@@ -4,8 +4,8 @@
 # 实时数据字段: Pt, ImpEp, Ua_0, I_0, I_1, I_2 (7个字段，用于API返回)
 # 存储字段: Pt, ImpEp, Ua_0 (3个字段，不存储三相电流)
 # 
-# 🔧 2026-01-10 更新计算公式 (根据实际PLC原始数据验证):
-# 🔧 2026-01-20 功率系数调整: 原 0.001 → 0.0001 (×0.1)
+# [FIX] 2026-01-10 更新计算公式 (根据实际PLC原始数据验证):
+# [FIX] 2026-01-20 功率系数调整: 原 0.001 → 0.0001 (×0.1)
 #   - 电压 Ua: raw × 0.1 (不乘变比)
 #   - 电流 I:  raw × 0.001 × ratio (料仓/风机=20, 辊道窑=60, SCR=20)
 #   - 功率 Pt: raw × 0.0001 × ratio
@@ -63,11 +63,14 @@ class ElectricityConverter(BaseConverter):
         "I_2": {"display_name": "C相电流", "unit": "A"},
     }
     
-    # 存储字段 (不含三相电流，用于写入数据库)
+    # 存储字段 (含三相电流，用于写入数据库)
     OUTPUT_FIELDS = {
         "Pt": {"display_name": "总有功功率", "unit": "kW"},
         "ImpEp": {"display_name": "正向有功电能", "unit": "kWh"},
         "Ua_0": {"display_name": "A相电压", "unit": "V"},
+        "I_0": {"display_name": "A相电流", "unit": "A"},
+        "I_1": {"display_name": "B相电流", "unit": "A"},
+        "I_2": {"display_name": "C相电流", "unit": "A"},
     }
     
     # 保留旧的 DEFAULT_SCALE 用于兼容
@@ -125,40 +128,45 @@ class ElectricityConverter(BaseConverter):
     
     def convert_for_storage(self, raw_data: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
-        转换电表数据 (不含三相电流，用于存储到数据库)
-        
+        转换电表数据 (含三相电流，用于存储到数据库)
+
         Args:
             raw_data: Parser 解析后的原始数据
             **kwargs:
                 - is_roller_kiln: 是否是辊道窑设备 (默认 False)
                 - is_scr: 是否是SCR氨水泵 (默认 False)
                 - current_ratio: 手动指定变比 (覆盖默认值)
-        
+
         Returns:
-            存储字段字典 (3个字段，不含三相电流)
+            存储字段字典 (6个字段: Pt, ImpEp, Ua_0, I_0, I_1, I_2)
         """
         # 判断电流变比: 优先级 is_scr > is_roller_kiln > default
         is_scr = kwargs.get('is_scr', False)
         is_roller_kiln = kwargs.get('is_roller_kiln', False)
-        
+
         if is_scr:
             current_ratio = self.CURRENT_RATIO_SCR
         elif is_roller_kiln:
             current_ratio = self.CURRENT_RATIO_ROLLER
         else:
             current_ratio = self.CURRENT_RATIO_DEFAULT
-        
+
         # 允许手动指定变比（覆盖默认值）
         current_ratio = kwargs.get('current_ratio', current_ratio)
-        
+
         return {
             # 功率: raw × 0.0001 × ratio (保留3位小数)
             "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 3),
-            
+
             # 能耗: raw × ratio (直接乘变比，不乘2)
             "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * current_ratio, 2),
-            
+
             # A相电压: raw × 0.1 (不乘变比)
             "Ua_0": round(self.get_field_value(raw_data, "Ua_0", 0.0) * self.SCALE_VOLTAGE, 1),
+
+            # 三相电流: raw × 0.001 × ratio
+            "I_0": round(self.get_field_value(raw_data, "I_0", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
+            "I_1": round(self.get_field_value(raw_data, "I_1", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
+            "I_2": round(self.get_field_value(raw_data, "I_2", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
         }
 

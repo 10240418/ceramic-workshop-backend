@@ -172,15 +172,15 @@ async def diagnose_zero_data():
     
     # 诊断结论
     if not mock_mode and not snap7_ok:
-        issues.append("❌ 关键问题: MOCK_MODE=false 但 snap7 不可用，会导致全 0 数据")
+        issues.append("[ERROR] 关键问题: MOCK_MODE=false 但 snap7 不可用，会导致全 0 数据")
     if not mock_mode and not plc_connected:
-        issues.append("❌ PLC 未连接，无法读取真实数据")
+        issues.append("[ERROR] PLC 未连接，无法读取真实数据")
     if not polling_running:
-        issues.append("⚠️ 轮询服务未运行")
+        issues.append("[WARN] 轮询服务未运行")
     if cache_count == 0:
-        issues.append("⚠️ 缓存为空，可能尚未完成首次轮询")
+        issues.append("[WARN] 缓存为空，可能尚未完成首次轮询")
     if zero_data_devices:
-        issues.append(f"⚠️ 发现 {len(zero_data_devices)} 个模块数据全为 0")
+        issues.append(f"[WARN] 发现 {len(zero_data_devices)} 个模块数据全为 0")
     
     return ApiResponse.ok({
         "config": {

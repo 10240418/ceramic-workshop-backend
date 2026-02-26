@@ -4,6 +4,7 @@
 # Core Framework
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
+websockets==12.0
 pydantic==2.5.3
 pydantic-settings==2.1.0
 
@@ -11,7 +12,7 @@ pydantic-settings==2.1.0
 influxdb-client==1.40.0
 
 # PLC Communication
-python-snap7==1.3
+python-snap7==2.0.2
 
 # Utilities
 python-dotenv==1.0.0
@@ -20,6 +21,10 @@ pyyaml==6.0.1
 # Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+
+# System Tray GUI
+PyQt5>=5.15.0
+psutil>=5.9.0
 
 # Development
 pytest==7.4.4

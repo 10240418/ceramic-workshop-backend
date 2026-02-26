@@ -10,21 +10,30 @@
 
 import threading
 import time
+import logging
 from typing import Optional, Tuple
 from datetime import datetime, timezone
 
 from config import get_settings
+from app.plc.snap7_compat import ensure_snap7_version
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 # 尝试导入 snap7
 try:
     import snap7
     from snap7.util import get_real, get_int
+    try:
+        from snap7.type import Parameter as S7Parameter
+    except Exception:
+        S7Parameter = None
     SNAP7_AVAILABLE = True
 except ImportError:
+    snap7 = None
+    S7Parameter = None
     SNAP7_AVAILABLE = False
-    print("⚠️ snap7 未安装，使用模拟模式")
+    logger.warning("snap7 未安装，使用模拟模式")
 
 
 class PLCManager:
@@ -60,7 +69,7 @@ class PLCManager:
         self._last_read_time: Optional[datetime] = None
         self._connect_count: int = 0
         self._error_count: int = 0
-        self._consecutive_error_count: int = 0  # 🔧 连续错误计数
+        self._consecutive_error_count: int = 0  # [FIX] 连续错误计数
         self._last_error: str = ""
         
         # 线程锁
@@ -70,9 +79,17 @@ class PLCManager:
         self._reconnect_interval: float = 5.0  # 重连间隔（秒）
         self._max_reconnect_attempts: int = 3  # 最大重连次数
         self._health_check_interval: float = 30.0  # 健康检查间隔
-        self._max_consecutive_errors: int = 10  # 🔧 连续错误达到此值则强制重连
+        self._max_consecutive_errors: int = 10  # [FIX] 连续错误达到此值则强制重连
         
-        print(f"📡 PLC Manager 初始化: {self._ip}:{self._rack}/{self._slot}")
+        if SNAP7_AVAILABLE and not settings.mock_mode:
+            valid, message = ensure_snap7_version()
+            if not valid:
+                self._last_error = message
+                logger.error(f"[PLC] {message}")
+            else:
+                logger.info(f"[PLC] {message}")
+
+        logger.info(f"[PLC] PLC Manager 初始化: {self._ip}:{self._rack}/{self._slot}")
     
     def update_config(self, ip: str = None, rack: int = None, slot: int = None, timeout_ms: int = None):
         """更新 PLC 连接配置（需要重连生效）"""
@@ -88,7 +105,7 @@ class PLCManager:
             
             # 断开旧连接
             self._disconnect_internal()
-            print(f"📡 PLC 配置已更新: {self._ip}:{self._rack}/{self._slot}")
+            logger.info(f"[PLC] PLC 配置已更新: {self._ip}:{self._rack}/{self._slot}")
     
     def connect(self) -> Tuple[bool, str]:
         """
@@ -117,13 +134,24 @@ class PLCManager:
             self._last_connect_time = datetime.now(timezone.utc)
             self._connect_count += 1
             return (True, "模拟模式")
+
+        if not settings.mock_mode:
+            valid, message = ensure_snap7_version()
+            if not valid:
+                self._error_count += 1
+                self._last_error = message
+                logger.error(f"[PLC] {message}")
+                return (False, message)
         
         try:
             if self._client is None:
                 self._client = snap7.client.Client()
             
             # 设置超时
-            self._client.set_param(snap7.types.PingTimeout, self._timeout_ms)
+            if S7Parameter is not None:
+                self._client.set_param(S7Parameter.PingTimeout, self._timeout_ms)
+            else:
+                self._client.set_param(snap7.types.PingTimeout, self._timeout_ms)
             
             # 连接
             self._client.connect(self._ip, self._rack, self._slot)
@@ -137,14 +165,14 @@ class PLCManager:
             self._last_connect_time = datetime.now(timezone.utc)
             self._connect_count += 1
             self._error_count = 0
-            print(f"✅ PLC 已连接 ({self._ip}) [第 {self._connect_count} 次]")
+            logger.info(f"[PLC] PLC 已连接 ({self._ip}) [第 {self._connect_count} 次]")
             return (True, "")
         
         except Exception as e:
             self._connected = False
             self._error_count += 1
             self._last_error = str(e)
-            print(f"❌ PLC 连接失败: {e}")
+            logger.error(f"[PLC] PLC 连接失败: {e}", exc_info=True)
             return (False, self._last_error)
     
     def disconnect(self):
@@ -161,7 +189,7 @@ class PLCManager:
             except Exception:
                 pass
         self._connected = False
-        print("🔌 PLC 已断开")
+        logger.info("[PLC] PLC 已断开")
     
     def read_db(self, db_number: int, start: int, size: int) -> Tuple[bool, bytes, str]:
         """
@@ -176,9 +204,9 @@ class PLCManager:
             (success, data, error_message)
         """
         with self._rw_lock:
-            # 🔧 检查连续错误，强制重连
+            # [FIX] 检查连续错误，强制重连
             if self._consecutive_error_count >= self._max_consecutive_errors:
-                print(f"⚠️ 连续 {self._consecutive_error_count} 次错误，强制重连 PLC...")
+                logger.warning(f"[PLC] 连续 {self._consecutive_error_count} 次错误，强制重连 PLC...")
                 self._disconnect_internal()
                 self._consecutive_error_count = 0
             
@@ -201,7 +229,7 @@ class PLCManager:
                     data = self._client.db_read(db_number, start, size)
                     self._last_read_time = datetime.now(timezone.utc)
                     self._error_count = 0
-                    self._consecutive_error_count = 0  # 🔧 成功后重置
+                    self._consecutive_error_count = 0  # [FIX] 成功后重置
                     return (True, bytes(data), "")
                 
                 except Exception as e:
@@ -211,14 +239,17 @@ class PLCManager:
                     
                     # 尝试重连
                     if attempt < self._max_reconnect_attempts - 1:
-                        print(f"⚠️ DB{db_number} 读取失败 (尝试 {attempt+1}/{self._max_reconnect_attempts}): {e}")
+                        logger.warning(f"[PLC] DB{db_number} 读取失败 (尝试 {attempt+1}/{self._max_reconnect_attempts}): {e}")
                         self._disconnect_internal()
                         time.sleep(0.5)
                         success, _ = self._connect_internal()
                         if not success:
                             continue
                     else:
-                        print(f"❌ DB{db_number} 读取失败 (已重试 {self._max_reconnect_attempts} 次): {e}")
+                        logger.error(
+                            f"[PLC] DB{db_number} 读取失败 (已重试 {self._max_reconnect_attempts} 次): {e}",
+                            exc_info=True,
+                        )
             
             return (False, b"", self._last_error)
     

@@ -28,7 +28,9 @@ _runtime_plc_config = {
     "rack": settings.plc_rack,
     "slot": settings.plc_slot,
     "timeout_ms": settings.plc_timeout,
-    "poll_interval": settings.plc_poll_interval
+    "poll_interval": settings.plc_poll_interval,
+    "realtime_poll_interval": settings.realtime_poll_interval,
+    "status_poll_interval": settings.status_poll_interval,
 }
 
 
@@ -43,7 +45,9 @@ class PLCConfigUpdate(BaseModel):
     rack: Optional[int] = None
     slot: Optional[int] = None
     timeout_ms: Optional[int] = None
-    poll_interval: Optional[int] = None
+    poll_interval: Optional[float] = None
+    realtime_poll_interval: Optional[float] = None
+    status_poll_interval: Optional[float] = None
 
 
 # ------------------------------------------------------------
@@ -104,6 +108,23 @@ async def update_plc_config(config: PLCConfigUpdate):
     if config.poll_interval is not None:
         _runtime_plc_config["poll_interval"] = config.poll_interval
         updated_fields["poll_interval"] = config.poll_interval
+
+    if config.realtime_poll_interval is not None:
+        _runtime_plc_config["realtime_poll_interval"] = config.realtime_poll_interval
+        updated_fields["realtime_poll_interval"] = config.realtime_poll_interval
+
+    if config.status_poll_interval is not None:
+        _runtime_plc_config["status_poll_interval"] = config.status_poll_interval
+        updated_fields["status_poll_interval"] = config.status_poll_interval
+
+    # 兼容旧字段: 仅更新 poll_interval 时，同步到双轮询间隔
+    if config.poll_interval is not None:
+        if config.realtime_poll_interval is None:
+            _runtime_plc_config["realtime_poll_interval"] = config.poll_interval
+            updated_fields["realtime_poll_interval"] = config.poll_interval
+        if config.status_poll_interval is None:
+            _runtime_plc_config["status_poll_interval"] = config.poll_interval
+            updated_fields["status_poll_interval"] = config.poll_interval
     
     # 重置 PLC 客户端，使新配置生效
     if any(k in updated_fields for k in ["ip_address", "rack", "slot", "timeout_ms"]):

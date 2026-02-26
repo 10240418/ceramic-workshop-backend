@@ -18,7 +18,7 @@ class DeviceStatusParser:
                          ("configs/status_scr_fan_11.yaml", 11)]:
             if (p := Path(path)).exists():
                 self._configs[db] = yaml.safe_load(p.read_text(encoding='utf-8'))
-                print(f"   ✅ 加载状态配置: DB{db}")
+                print(f"   [OK] 加载状态配置: DB{db}")
     
     def parse_module_status(self, data: bytes, offset: int) -> Dict[str, Any]:
         """解析单个模块状态 (4字节)"""
@@ -38,7 +38,7 @@ class DeviceStatusParser:
             if key == 'db_config' or not isinstance(devices, list):
                 continue
             for device in devices:
-                # 🔧 [FIX] 兼容两种配置格式:
+                # [FIX] [FIX] 兼容两种配置格式:
                 # 1. 标准格式 (DB3/DB11): device 包含 modules 列表
                 # 2. 扁平格式 (DB7): device 本身就是模块 (含 offset)
                 

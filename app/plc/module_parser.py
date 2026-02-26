@@ -40,7 +40,7 @@ class ModuleParser:
         for module in config.get('modules', []):
             self.modules[module['name']] = module
             
-        print(f"✅ 加载了 {len(self.modules)} 个模块配置")
+        print(f"[OK] 加载了 {len(self.modules)} 个模块配置")
     
     # ------------------------------------------------------------
     # 3. parse_field() - 解析单个字段 (支持递归 Struct)
@@ -106,7 +106,7 @@ class ModuleParser:
             return raw_value
             
         except Exception as e:
-            print(f"⚠️  解析字段 {field.get('name')} 失败 (Offset: {current_offset}, Type: {data_type}): {e}")
+            print(f"[WARN]  解析字段 {field.get('name')} 失败 (Offset: {current_offset}, Type: {data_type}): {e}")
             return 0.0
     
     # ------------------------------------------------------------
@@ -178,7 +178,7 @@ class ModuleParser:
                 module_data = self.parse_module(module_name, db_data)
                 device_data['modules'][module_name] = module_data
             except Exception as e:
-                print(f"⚠️  解析模块 {module_name} 失败: {e}")
+                print(f"[WARN]  解析模块 {module_name} 失败: {e}")
         
         return device_data
 

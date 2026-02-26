@@ -11,7 +11,7 @@ from app.core.influxdb import write_point
 
 def seed_mock_data():
     """插入模拟数据到 InfluxDB，确保所有设备都有初始数据"""
-    print("📊 开始插入模拟数据...")
+    print(" 开始插入模拟数据...")
     
     try:
         # 1. 料仓数据 (9个料仓)
@@ -26,10 +26,10 @@ def seed_mock_data():
         # 4. 风机数据 (2台)
         seed_fan_data()
         
-        print("✅ 模拟数据插入完成！")
+        print("[OK] 模拟数据插入完成！")
         return True
     except Exception as e:
-        print(f"❌ 模拟数据插入失败: {str(e)}")
+        print(f"[ERROR] 模拟数据插入失败: {str(e)}")
         return False
 
 
@@ -104,7 +104,7 @@ def seed_hopper_data():
             }
         )
     
-    print(f"  ✓ 插入 {len(hoppers)} 个料仓的模拟数据")
+    print(f"  [OK] 插入 {len(hoppers)} 个料仓的模拟数据")
 
 
 def seed_roller_kiln_data():
@@ -149,7 +149,7 @@ def seed_roller_kiln_data():
             }
         )
     
-    print(f"  ✓ 插入辊道窑 {len(zones)} 个温区的模拟数据")
+    print(f"  [OK] 插入辊道窑 {len(zones)} 个温区的模拟数据")
 
 
 def seed_scr_data():
@@ -195,7 +195,7 @@ def seed_scr_data():
             }
         )
     
-    print(f"  ✓ 插入 {len(scr_devices)} 台SCR设备的模拟数据")
+    print(f"  [OK] 插入 {len(scr_devices)} 台SCR设备的模拟数据")
 
 
 def seed_fan_data():
@@ -225,4 +225,4 @@ def seed_fan_data():
             }
         )
     
-    print(f"  ✓ 插入 {len(fan_devices)} 台风机的模拟数据")
+    print(f"  [OK] 插入 {len(fan_devices)} 台风机的模拟数据")

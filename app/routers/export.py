@@ -26,10 +26,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
 from app.models.response import ApiResponse
-from app.services.data_export_service import get_export_service
-from app.services.data_export_service_v2 import get_export_service_v2
-from app.services.data_export_service_v3 import get_export_service_v3
-from app.utils.time_slice_utils import parse_days_parameter
+from app.services.data_export_service import get_export_service, get_export_service_v3
+from app.tools.time_slice_tools import parse_days_parameter
 
 router = APIRouter(prefix="/api/export", tags=["数据导出统计"])
 
@@ -458,7 +456,7 @@ async def export_comprehensive_data(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
     days: Optional[int] = Query(None, description="查询最近N天（如果未指定start_time和end_time）"),
-    version: Optional[str] = Query("v3", description="版本选择: v1(旧版), v2(优化版), v3(终极优化版，推荐)")
+    version: Optional[str] = Query("v3", description="版本选择: v1(实时计算), v3(优化版，推荐)")
 ):
     """综合导出所有设备的所有数据（按天统计）
     
@@ -485,18 +483,12 @@ async def export_comprehensive_data(
     - **建议**: 最多查询30天，避免查询时间过长
     
     **版本选择**:
-    - **v3 (终极优化版，推荐)**:
+    - **v3 (优化版，推荐)**:
       - 批量查询预计算数据（一次查询所有设备）
       - 并行计算不完整天（线程池）
       - 内存缓存完整天数据
       - **性能提升**: 10-20倍
       - **适用场景**: 生产环境，30天以内数据
-    
-    - **v2 (优化版)**:
-      - 使用预计算数据
-      - 串行查询（每个设备单独查询）
-      - **性能提升**: 2-3倍
-      - **适用场景**: 7天以内数据
     
     - **v1 (旧版)**:
       - 实时计算所有数据
@@ -542,20 +534,17 @@ async def export_comprehensive_data(
     
     **示例**:
     ```
-    # 查询今天的数据（V3终极优化版，推荐）
+    # 查询今天的数据（推荐）
     GET /api/export/comprehensive?days=1
     
-    # 查询最近7天所有数据（V3终极优化版）
-    GET /api/export/comprehensive?days=7&version=v3
+    # 查询最近7天所有数据
+    GET /api/export/comprehensive?days=7
     
-    # 查询最近30天所有数据（V3终极优化版）
-    GET /api/export/comprehensive?days=30&version=v3
+    # 查询最近30天所有数据
+    GET /api/export/comprehensive?days=30
     
-    # 查询指定时间段所有数据（V3终极优化版）
-    GET /api/export/comprehensive?start_time=2026-01-01T00:00:00Z&end_time=2026-01-31T23:59:59Z&version=v3
-    
-    # 使用V2版本（优化版）
-    GET /api/export/comprehensive?days=7&version=v2
+    # 查询指定时间段所有数据
+    GET /api/export/comprehensive?start_time=2026-01-01T00:00:00Z&end_time=2026-01-31T23:59:59Z
     
     # 使用V1版本（旧版，慢）
     GET /api/export/comprehensive?days=7&version=v1
@@ -565,7 +554,6 @@ async def export_comprehensive_data(
     | 版本 | 30天查询时间 | 适用场景 |
     |-----|------------|---------|
     | V3  | 1-2秒      | 生产环境（推荐） |
-    | V2  | 10-15秒    | 小数据量 |
     | V1  | 60-120秒   | 调试验证 |
     """
     try:
@@ -587,16 +575,9 @@ async def export_comprehensive_data(
         
         # 选择服务版本
         if version == "v3":
-            # V3: 终极优化版（批量查询 + 并行计算 + 内存缓存）
+            # V3: 优化版（批量查询 + 并行计算 + 内存缓存）
             service = get_export_service_v3()
             result = service.export_comprehensive_v3(
-                start_time=start_dt,
-                end_time=end_dt
-            )
-        elif version == "v2":
-            # V2: 优化版（预计算数据）
-            service = get_export_service_v2()
-            result = service.export_comprehensive_optimized(
                 start_time=start_dt,
                 end_time=end_dt
             )

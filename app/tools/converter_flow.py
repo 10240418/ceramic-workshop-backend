@@ -3,7 +3,7 @@
 # ============================================================
 # 存储字段: flow_rate (L/min), total_flow (m³)
 # 
-# 🔧 2026-01-10 更新:
+# [FIX] 2026-01-10 更新:
 #   - flow_rate 单位改为 L/min（原 m³/h）
 #   - total_flow 保持 m³ 不变
 # ============================================================
@@ -55,7 +55,7 @@ class FlowConverter(BaseConverter):
         total_flow_m3 = self.get_field_value(raw_data, "TotalFlow", 0)  # m³ 整数
         total_flow_ml = self.get_field_value(raw_data, "TotalFlowMilli", 0)  # mL 小数
         
-        # 🔧 实时流量: 原始值 × 0.001 = L/min
+        # [FIX] 实时流量: 原始值 × 0.001 = L/min
         # 例如: raw=42223 → 42.223 L/min
         flow_rate = rt_flow_raw * self.SCALE_FLOW_RATE
         

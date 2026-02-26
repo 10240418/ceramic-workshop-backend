@@ -254,13 +254,13 @@ if __name__ == "__main__":
     
     # 测试获取配置
     plc_config = storage.get_plc_config()
-    print(f"\n📍 PLC 配置:")
+    print(f"\n PLC 配置:")
     print(f"  IP: {plc_config.get('ip')}")
     print(f"  Rack: {plc_config.get('rack')}")
     print(f"  Slot: {plc_config.get('slot')}")
     
     # 测试获取设备
     devices = storage.get_all_devices()
-    print(f"\n📋 设备数量: {len(devices)}")
+    print(f"\n 设备数量: {len(devices)}")
     
-    print("\n✅ 测试完成")
+    print("\n[OK] 测试完成")

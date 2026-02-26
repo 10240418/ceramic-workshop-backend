@@ -75,7 +75,7 @@ class InfluxDBMigration:
                 except Exception:
                     pass
                 self.client = None
-            print(f"❌ InfluxDB 连接失败: {e}")
+            print(f"[ERROR] InfluxDB 连接失败: {e}")
             return False
     
     def disconnect(self) -> None:
@@ -103,11 +103,11 @@ class InfluxDBMigration:
             existing_bucket = buckets_api.find_bucket_by_name(self.bucket)
             
             if existing_bucket:
-                print(f"  ✅ Bucket 已存在: {self.bucket} (永久保留)")
+                print(f"  [OK] Bucket 已存在: {self.bucket} (永久保留)")
                 return True
             
             # 创建新 Bucket（永久保留，无过期策略）
-            print(f"  📝 创建 Bucket: {self.bucket} (永久保留)")
+            print(f"   创建 Bucket: {self.bucket} (永久保留)")
             
             buckets_api.create_bucket(
                 bucket_name=self.bucket,
@@ -115,11 +115,11 @@ class InfluxDBMigration:
                 # 不设置 retention_rules 表示永久保留
             )
             
-            print(f"  ✅ Bucket 创建成功: {self.bucket} (永久保留)")
+            print(f"  [OK] Bucket 创建成功: {self.bucket} (永久保留)")
             return True
             
         except Exception as e:
-            print(f"  ❌ Bucket 创建失败: {e}")
+            print(f"  [ERROR] Bucket 创建失败: {e}")
             return False
     
     # ------------------------------------------------------------
@@ -133,7 +133,7 @@ class InfluxDBMigration:
         Returns:
             bool: 是否成功
         """
-        print(f"  ℹ️  所有数据已配置为永久保留，无需创建额外保留策略")
+        print(f"    所有数据已配置为永久保留，无需创建额外保留策略")
         return True
     
     # ------------------------------------------------------------
@@ -148,7 +148,7 @@ class InfluxDBMigration:
         Returns:
             bool: 是否成功
         """
-        print(f"  ℹ️  数据永久保留，暂不创建聚合任务")
+        print(f"    数据永久保留，暂不创建聚合任务")
         return True
     
     # ------------------------------------------------------------
@@ -161,11 +161,11 @@ class InfluxDBMigration:
             bool: 是否验证通过
         """
         try:
-            print(f"  📊 验证 Schema 定义...")
+            print(f"   验证 Schema 定义...")
             
             summary = get_schema_summary()
             total = summary['total_measurements']
-            print(f"  ℹ️  共定义 {total} 个 Measurements:")
+            print(f"    共定义 {total} 个 Measurements:")
             
             # 按分类显示
             categories = {
@@ -181,13 +181,13 @@ class InfluxDBMigration:
                 for m in summary['measurements']:
                     if m['name'] in measurement_names:
                         tags_str = f"{m['tags_count']} tags" if m['tags_count'] > 0 else "无tags"
-                        print(f"      ✓ {m['name']:<25} | {m['fields_count']} fields, {tags_str}")
+                        print(f"      [OK] {m['name']:<25} | {m['fields_count']} fields, {tags_str}")
             
-            print(f"\n  ✅ Schema 验证通过 (共 {total} 个表)")
+            print(f"\n  [OK] Schema 验证通过 (共 {total} 个表)")
             return True
             
         except Exception as e:
-            print(f"  ❌ Schema 验证失败: {e}")
+            print(f"  [ERROR] Schema 验证失败: {e}")
             return False
     
     # ------------------------------------------------------------
@@ -202,36 +202,36 @@ class InfluxDBMigration:
             bool: 迁移是否成功
         """
         print("=" * 70)
-        print("🚀 InfluxDB 自动迁移")
+        print(" InfluxDB 自动迁移")
         print("=" * 70)
         
         # 1. 连接
-        print("\n1️⃣  连接 InfluxDB...")
+        print("\n[1/5] 连接 InfluxDB...")
         if not self.connect():
             return False
-        print("  ✅ 连接成功")
+        print("  [OK] 连接成功")
         
         # 2. 创建主 Bucket
-        print("\n2️⃣  检查并创建主 Bucket...")
+        print("\n[2/5] 检查并创建主 Bucket...")
         if not self.check_and_create_bucket():
             return False
         
         # 3. 创建保留策略 Bucket
-        print("\n3️⃣  创建保留策略...")
+        print("\n[3/5] 创建保留策略...")
         if not self.create_retention_policies():
-            print("  ⚠️  保留策略创建失败，使用默认策略")
+            print("  [WARN]  保留策略创建失败，使用默认策略")
         
         # 4. 创建连续查询（可选）
-        print("\n4️⃣  创建连续查询...")
+        print("\n[4/5] 创建连续查询...")
         self.create_continuous_queries()
         
         # 5. 验证 Schema
-        print("\n5️⃣  验证 Schema...")
+        print("\n[5/5] 验证 Schema...")
         if not self.verify_schema():
             return False
         
         print("\n" + "=" * 70)
-        print("✅ InfluxDB 迁移完成！")
+        print("[OK] InfluxDB 迁移完成！")
         print("=" * 70)
         
         self.disconnect()
@@ -253,7 +253,7 @@ def auto_migrate_on_startup() -> bool:
         migration = InfluxDBMigration()
         return migration.auto_migrate()
     except Exception as e:
-        print(f"❌ InfluxDB 自动迁移失败: {e}")
+        print(f"[ERROR] InfluxDB 自动迁移失败: {e}")
         return False
 
 

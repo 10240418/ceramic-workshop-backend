@@ -50,7 +50,7 @@ class PLCService:
         """重新加载配置 (模块定义 + 设备映射)"""
         self.parser.load_module_configs()
         self._load_device_modules()
-        print("✅ PLCService 配置已重新加载")
+        print("[OK] PLCService 配置已重新加载")
     
     # ------------------------------------------------------------
     # 2. read_device_data() - 读取设备数据

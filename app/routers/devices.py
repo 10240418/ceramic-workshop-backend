@@ -14,7 +14,7 @@ from app.services.history_query_service import get_history_service
 
 router = APIRouter(prefix="/api/devices", tags=["通用设备查询"])
 
-# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
+# [FIX] 删除模块级实例化，改为在函数内调用 get_history_service()
 
 
 # ============================================================
@@ -27,9 +27,9 @@ async def get_db_devices_realtime(
     """按DB块批量获取所有设备实时数据（终极优化方案）
     
     **优势**:
-    - 🎯 按物理DB块分组查询
-    - 🚀 一次请求获取整个DB块的所有设备数据
-    - 📊 配合 /api/config/db-mappings 动态适配
+    -  按物理DB块分组查询
+    -  一次请求获取整个DB块的所有设备数据
+    -  配合 /api/config/db-mappings 动态适配
     
     **工作流程**:
     ```
@@ -120,7 +120,7 @@ async def get_db_devices_realtime(
                         **realtime_data
                     })
             except Exception as e:
-                print(f"⚠️  查询 {device_id} 失败: {str(e)}")
+                print(f"[WARN]  查询 {device_id} 失败: {str(e)}")
                 continue
         
         return ApiResponse.ok({

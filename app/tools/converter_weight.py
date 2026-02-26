@@ -53,9 +53,11 @@ class WeightConverter(BaseConverter):
     
     输出字段 (存储):
         - weight: 实时重量 (kg)
-        - feed_rate: 下料速度 (kg/h)
         - is_stable: 稳定标志
         - is_overload: 超载标志
+    
+    注意:
+        feed_rate 不再由此模块计算, 改由 feeding_analysis_service v5.0 负责
     
     重量计算公式:
         实际重量 = 原始值 × 分度值
@@ -66,13 +68,9 @@ class WeightConverter(BaseConverter):
     
     OUTPUT_FIELDS = {
         "weight": {"display_name": "实时重量", "unit": "kg"},
-        "feed_rate": {"display_name": "下料速度", "unit": "kg/h"},
         "is_stable": {"display_name": "稳定", "unit": ""},
         "is_overload": {"display_name": "超载", "unit": ""},
     }
-    
-    # 默认轮询间隔 (秒)
-    DEFAULT_INTERVAL = 5.0
     
     @staticmethod
     def parse_status_word(status_word: int) -> Dict[str, Any]:
@@ -113,21 +111,17 @@ class WeightConverter(BaseConverter):
         Args:
             raw_data: Parser 解析后的原始数据
             **kwargs:
-                - previous_weight: 上一次的重量值 (kg，已经缩放后的值)
-                - interval: 时间间隔 (秒，默认 5.0)
-                - force_scale: 强制使用的缩放系数 (可选，用于覆盖状态字)
+                - force_scale: 强制使用的缩放系数 (可选, 用于覆盖状态字)
         
         Returns:
-            存储字段字典
+            存储字段字典: weight, is_stable, is_overload
         
         说明:
-            1. 首先从 StatusWord 解析分度值
+            1. 从 StatusWord 解析分度值
             2. 使用分度值将原始重量转换为实际重量
-            3. 计算下料速度 (kg/h)
+            3. feed_rate 不再由此模块计算, 改由 feeding_analysis_service 负责
         """
         # 获取参数
-        previous_weight: Optional[float] = kwargs.get('previous_weight')
-        interval: float = kwargs.get('interval', self.DEFAULT_INTERVAL)
         force_scale: Optional[float] = kwargs.get('force_scale')
         
         # 获取状态字并解析
@@ -151,25 +145,8 @@ class WeightConverter(BaseConverter):
         # 应用分度值得到实际重量
         current_weight = float(raw_weight) * scale
         
-        # 计算下料速度 (kg/h)
-        feed_rate = 0.0
-        if previous_weight is not None and interval > 0:
-            # 下料时重量减少: previous > current
-            weight_diff = previous_weight - current_weight
-            # 转换为 kg/h: (kg/s) * 3600
-            feed_rate = (weight_diff / interval) * 3600
-            
-            # 如果 feed_rate 为负数，说明在加料
-            # 保留负值，让上层决定如何处理
-        
         return {
             "weight": round(current_weight, 3),
-            "feed_rate": round(feed_rate, 2),
             "is_stable": status["is_stable"],
             "is_overload": status["is_overload"],
-            # 调试信息 (可选)
-            # "division_code": status["division_code"],
-            # "division_value": scale,
-            # "raw_weight": raw_weight,
-            # "status_word": status_word,
         }

@@ -301,7 +301,7 @@ if __name__ == "__main__":
     print(f"\n总计 Measurements: {summary['total_measurements']}")
     
     for m in summary['measurements']:
-        print(f"\n📊 {m['name']}")
+        print(f"\n {m['name']}")
         print(f"   描述: {m['description']}")
         print(f"   Tags: {m['tags_count']} 个")
         print(f"   Fields: {m['fields_count']} 个")

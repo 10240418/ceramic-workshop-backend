@@ -75,7 +75,7 @@ def close_influx_client() -> None:
         try:
             _write_api.close()
         except Exception as e:
-            print(f"⚠️ 关闭 write_api 失败: {e}")
+            print(f"[WARN] 关闭 write_api 失败: {e}")
         finally:
             _write_api = None
     
@@ -83,9 +83,9 @@ def close_influx_client() -> None:
     if _influx_client is not None:
         try:
             _influx_client.close()
-            print("✅ InfluxDB 客户端已关闭")
+            print("[OK] InfluxDB 客户端已关闭")
         except Exception as e:
-            print(f"⚠️ 关闭 InfluxDB 客户端失败: {e}")
+            print(f"[WARN] 关闭 InfluxDB 客户端失败: {e}")
         finally:
             _influx_client = None
 
@@ -137,7 +137,7 @@ def write_point(measurement: str, tags: Dict[str, str], fields: Dict[str, Any], 
             )
         return True
     except Exception as e:
-        print(f"❌ InfluxDB 写入失败: {e}")
+        print(f"[ERROR] InfluxDB 写入失败: {e}")
         return False
 
 
@@ -298,5 +298,5 @@ def query_data(
         
         return data
     except Exception as e:
-        print(f"❌ InfluxDB 查询失败: {e}")
+        print(f"[ERROR] InfluxDB 查询失败: {e}")
         return []

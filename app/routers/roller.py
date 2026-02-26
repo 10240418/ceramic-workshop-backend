@@ -13,6 +13,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
+from app.core.unified_naming import parse_history_fields
 from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
     get_latest_device_data,
@@ -22,7 +23,7 @@ from app.services.polling_service import (
 
 router = APIRouter(prefix="/api/roller", tags=["辊道窑设备"])
 
-# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
+# [FIX] 删除模块级实例化，改为在函数内调用 get_history_service()
 
 # 辊道窑设备ID
 ROLLER_KILN_ID = "roller_kiln_1"
@@ -118,22 +119,22 @@ async def get_roller_realtime_formatted():
         {
           "zone_id": "zone1",
           "temperature": 820.0,
-          "power": 38.0,
-          "energy": 1250.0,
-          "voltage": 220.0,
-          "current_a": 100.0,
-          "current_b": 100.0,
-          "current_c": 100.0
+                    "Pt": 38.0,
+                    "ImpEp": 1250.0,
+                    "Ua_0": 220.0,
+                    "I_0": 100.0,
+                    "I_1": 100.0,
+                    "I_2": 100.0
         },
         ...  // zone2-zone6
       ],
       "total": {
-        "power": 240.0,
-        "energy": 8500.0,
-        "voltage": 220.0,
-        "current_a": 600.0,
-        "current_b": 600.0,
-        "current_c": 600.0
+                "Pt": 240.0,
+                "ImpEp": 8500.0,
+                "Ua_0": 220.0,
+                "I_0": 600.0,
+                "I_1": 600.0,
+                "I_2": 600.0
       }
     }
     ```
@@ -171,14 +172,12 @@ async def get_roller_realtime_formatted():
                 "zone_id": zone_id,
                 "zone_name": f"{i}号温区",
                 "temperature": modules.get(temp_tag, {}).get("fields", {}).get("temperature", 0.0),
-                "power": meter_fields.get("Pt", 0.0),
-                "energy": meter_fields.get("ImpEp", 0.0),
-                # A相电压
-                "voltage": meter_fields.get("Ua_0", 0.0),
-                # 三相电流 (已乘变比60)
-                "current_a": meter_fields.get("I_0", 0.0),
-                "current_b": meter_fields.get("I_1", 0.0),
-                "current_c": meter_fields.get("I_2", 0.0),
+                "Pt": meter_fields.get("Pt", 0.0),
+                "ImpEp": meter_fields.get("ImpEp", 0.0),
+                "Ua_0": meter_fields.get("Ua_0", 0.0),
+                "I_0": meter_fields.get("I_0", 0.0),
+                "I_1": meter_fields.get("I_1", 0.0),
+                "I_2": meter_fields.get("I_2", 0.0),
             }
             zones.append(zone_data)
         
@@ -188,22 +187,22 @@ async def get_roller_realtime_formatted():
         if total_cached:
             total_fields = total_cached.get("modules", {}).get("total_meter", {}).get("fields", {})
             total_data = {
-                "power": total_fields.get("Pt", 0.0),
-                "energy": total_fields.get("ImpEp", 0.0),
-                "voltage": total_fields.get("Ua_0", 0.0),
-                "current_a": total_fields.get("I_0", 0.0),
-                "current_b": total_fields.get("I_1", 0.0),
-                "current_c": total_fields.get("I_2", 0.0),
+                "Pt": total_fields.get("Pt", 0.0),
+                "ImpEp": total_fields.get("ImpEp", 0.0),
+                "Ua_0": total_fields.get("Ua_0", 0.0),
+                "I_0": total_fields.get("I_0", 0.0),
+                "I_1": total_fields.get("I_1", 0.0),
+                "I_2": total_fields.get("I_2", 0.0),
             }
         else:
             # 如果总表缓存不存在，前端可以自行累加
             total_data = {
-                "power": sum(z["power"] for z in zones),
-                "energy": sum(z["energy"] for z in zones),
-                "voltage": sum(z["voltage"] for z in zones) / 6 if zones else 0.0,
-                "current_a": sum(z["current_a"] for z in zones),
-                "current_b": sum(z["current_b"] for z in zones),
-                "current_c": sum(z["current_c"] for z in zones),
+                "Pt": sum(z["Pt"] for z in zones),
+                "ImpEp": sum(z["ImpEp"] for z in zones),
+                "Ua_0": sum(z["Ua_0"] for z in zones) / 6 if zones else 0.0,
+                "I_0": sum(z["I_0"] for z in zones),
+                "I_1": sum(z["I_1"] for z in zones),
+                "I_2": sum(z["I_2"] for z in zones),
             }
         
         formatted_data = {
@@ -260,8 +259,8 @@ async def get_roller_history(
         if not end:
             end = datetime.now()
         
-        # 解析字段列表
-        field_list = fields.split(",") if fields else None
+        # 解析并校验字段列表（仅保留统一数据库字段）
+        field_list = parse_history_fields(fields, module_type)
         
         # 构建 module_tag 筛选
         module_tag = f"{zone}_temp" if zone and module_type == "TemperatureSensor" else None

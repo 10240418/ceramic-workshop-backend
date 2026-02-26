@@ -10,6 +10,29 @@ docker-compose up -d && pip install -r requirements.txt && python3 main.py
 
 **访问**: http://localhost:8080/docs
 
+## EXE 打包部署（Windows）
+
+```bash
+build_exe.bat
+```
+
+打包完成后目录结构：
+
+```text
+dist/WorkshopBackend/
+├── WorkshopBackend.exe
+├── .env
+├── configs/
+├── data/
+├── logs/
+└── _internal/
+```
+
+说明：
+- 运行时优先读取 exe 同目录的 `.env` 和 `configs/`。
+- `logs/app.error.log` 仅记录 `error` 级别日志，按天轮转，默认保留 60 天。
+- PLC 模式下会校验 `python-snap7` 版本，默认要求 `2.0.2`。
+
 ## 数据流
 
 ```
@@ -93,6 +116,9 @@ POST /api/config/plc/test
 INFLUX_URL=http://localhost:8086
 INFLUX_TOKEN=ceramic-workshop-token
 PLC_IP=192.168.50.223
+LOG_DIR=logs
+LOG_RETENTION_DAYS=60
+SNAP7_REQUIRED_VERSION=2.0.2
 ```
 
 ## 故障排查

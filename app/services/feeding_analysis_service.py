@@ -1,547 +1,504 @@
 # ============================================================
-# 文件说明: feeding_analysis_service.py - 投料自动分析服务 (v2.2 固定下料速度版)
+# 文件说明: feeding_analysis_service.py - 投料分析服务 v6.0
 # ============================================================
-# 功能:
-# 1. 自动分析: 每5分钟运行一次 (实时性提升)
-# 2. 数据源: 查询InfluxDB过去30分钟的料仓重量数据 (原始6秒数据)
-# 3. 算法: Valley-Peak-Compensation 算法 (识别投料事件并计算投料量)
-# 4. 存储: 将计算结果存回 InfluxDB (measurement="feeding_records")
-# 5. 去重: 基于 (device_id, valley_timestamp) 的内存去重机制
+# 核心功能:
+# 1. 滑动窗口(可配置, 默认36样本)维护7组料仓的重量序列
+# 2. 每N次轮询计算一次(可配置, 默认12次): 显示下料速度(存DB)
+# 3. 投料总量累计计算: 逐点有效下降累加 + 上料期间缓存补偿(存DB)
+# 窗口大小和计算间隔通过 .env FEEDING_WINDOW_SIZE / FEEDING_CALC_INTERVAL 配置
+# 4. 上料记录检测(去抖动状态机, 存DB, 支持45分钟合并)
 # ============================================================
-# v2.2 核心改进 (2026-01-27):
-# - 固定下料速度: 窑7654=10kg/h, 窑839=22kg/h (不再动态计算)
-# - 补偿计算: 固定下料速度 × 投料持续时间 (秒)
-# - 去重机制: 内存缓存已处理事件，防止5分钟检测导致重复存储
-# - 边缘保护: 未完成的投料不存数据库，等待下次分析
+# 调用关系:
+#   polling_service._update_latest_data()
+#       -> feeding_analysis_service.push_sample(device_id, weight, timestamp)
+#       -> 每12次触发 _on_window_tick()
+#       -> 计算速度 / 累计量 / 上料记录
 # ============================================================
-# 优化点:
-# - 检测频率: 2小时 → 5分钟 (提升24倍)
-# - 聚合粒度: 30分钟 → 原始数据 (6秒轮询)
-# - 查询窗口: 24小时 → 30分钟 (减少查询负载)
-# - 边缘保护: 增强未完成投料的检测逻辑
+# 方法列表:
+# 1. restore_from_db()            - 启动时还原投料总量
+# 2. push_sample()                - 每次轮询推入样本
+# 3. _on_window_tick()            - 每12次触发计算
+# 4. _calc_display_feed_rate()    - 显示下料速度
+# 5. _calc_feeding_total()        - 投料总量增量 (逐点累加 + 缓存补偿)
+# 6. _update_loading_state()      - 上料检测状态机
+# 7. _save_loading_record()       - 上料记录写入/合并
+# 8. get_display_feed_rate()      - 查询显示下料速度
+# 9. get_feeding_total()          - 查询投料总量
+# 10. get_all_feeding_data()      - 查询所有料仓数据快照
 # ============================================================
 
-import asyncio
-import math
-from datetime import datetime, timedelta, timezone
-from typing import List, Dict, Any, Optional
+import logging
+from collections import deque
+from datetime import datetime, timezone
+from typing import Dict, List, Optional, NamedTuple
 
-from config import get_settings
-from app.core.influxdb import get_influx_client, write_points_batch
-from app.services.history_query_service import HistoryQueryService
-from app.services.polling_service import get_latest_data
-# 引入 InfluxDB 写入 Point 结构
 from influxdb_client import Point
 from influxdb_client.client.write_api import SYNCHRONOUS
 
+from app.core.influxdb import get_influx_client
+from config import get_settings
+
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
-class FeedingAnalysisService:
+# ============================================================
+# 配置常量 (不受算法影响的静态值)
+# ============================================================
+# 抖动死区阈值 (kg) - 相邻两点差值在此范围内视为不变
+DEAD_ZONE_KG = 0.01
+
+# 有效重量下限 (kg) - 低于此值视为料仓空或传感器异常
+MIN_VALID_WEIGHT = 10.0
+
+# 上料记录去抖动: 连续上升/下降次数阈值
+LOADING_DEBOUNCE_COUNT = 3
+
+# 上料记录合并: 两次上料间隔小于此时间 (秒) 则合并
+LOADING_MERGE_INTERVAL_S = 45 * 60  # 45 分钟
+
+# 7 个有称重传感器的料仓 (排除 no_hopper_1/2)
+HOPPER_DEVICES: List[str] = [
+    "short_hopper_1",
+    "short_hopper_2",
+    "short_hopper_3",
+    "short_hopper_4",
+    "long_hopper_1",
+    "long_hopper_2",
+    "long_hopper_3",
+]
+
+
+# ============================================================
+# 数据结构
+# ============================================================
+class WeightSample(NamedTuple):
+    """单次重量采样"""
+    weight: float       # kg
+    timestamp: datetime  # 带时区
+
+
+class LoadingState:
+    """单个料仓的上料检测状态机"""
     def __init__(self):
-        self._is_running = False
-        self._task = None
-        
-        # ============================================================
-        # 🔧 核心参数优化
-        # ============================================================
-        self.run_interval_minutes = 5      # 运行频率: 5分钟检测一次 (原2小时)
-        self.query_window_minutes = 30     # 查询窗口: 回溯30分钟 (原24小时)
-        self.use_raw_data = True           # 使用原始数据 (不聚合)
-        
-        # ============================================================
-        # 算法参数
-        # ============================================================
-        self.min_feeding_threshold = 10.0  # 最小投料阈值 (kg)
-        self.rising_step_threshold = 5.0   # 上升步长阈值 (kg)
-        self.drop_threshold = 5.0          # 下降阈值 (kg)
-        self.lookahead_steps = 3           # 前瞻步数 (防止波动误判)
-        
-        # ============================================================
-        # 固定下料速度配置 (v2.2 - 用户定制)
-        # ============================================================
-        # 窑7654 (short_hopper): 10 kg/h
-        # 窑839 (long_hopper): 22 kg/h
-        self.feed_rate_short_hopper = 10.0 / 3600.0  # kg/秒
-        self.feed_rate_long_hopper = 22.0 / 3600.0   # kg/秒
-        
-        # ============================================================
-        # 去重机制 (v2.2 - 防止重复存储)
-        # ============================================================
-        # 记录已处理的投料事件 (device_id, valley_time)
-        # 结构: {(device_id, valley_timestamp): True}
-        self.processed_events = {}
-        self.max_cache_size = 1000  # 最多缓存1000条记录
-        
-        # ============================================================
-        # 优化参数 (v2.1)
-        # ============================================================
-        self.boundary_extension = 15       # 边界扩展时间 (分钟)
-        
-        self.history_service = HistoryQueryService()
+        self.is_loading: bool = False
+        self.consecutive_rise: int = 0
+        self.consecutive_fall: int = 0
+        self.loading_start_ts: Optional[datetime] = None
+        self.min_weight: float = 0.0
+        self.max_weight: float = 0.0
 
-    def start(self):
-        """启动后台分析任务"""
-        if self._is_running:
-            return
-        self._is_running = True
-        self._task = asyncio.create_task(self._scheduled_loop())
-        print(f"🚀 [FeedingService] 投料分析服务已启动 (v2.2 固定下料速度版)")
-        print(f"   ⏱️  检测频率: {self.run_interval_minutes} 分钟")
-        print(f"   📊 查询窗口: {self.query_window_minutes} 分钟")
-        print(f"   🎯 数据模式: {'原始数据(6秒)' if self.use_raw_data else '聚合数据'}")
-        print(f"   📏 投料阈值: {self.min_feeding_threshold} kg")
-        print(f"   🔧 下料速度: 窑7654={self.feed_rate_short_hopper*3600:.1f}kg/h, 窑839={self.feed_rate_long_hopper*3600:.1f}kg/h")
 
-    def stop(self):
-        """停止服务"""
-        self._is_running = False
-        if self._task:
-            self._task.cancel()
-        print(f"🛑 [FeedingService] 投料分析服务已停止")
+# ============================================================
+# 主服务类
+# ============================================================
+class FeedingAnalysisService:
+    """
+    投料分析服务 v6.0
 
-    async def _scheduled_loop(self):
-        """调度循环"""
-        # 初次启动等待30秒，避免和系统初始化冲突
-        await asyncio.sleep(30)
-        
-        while self._is_running:
-            try:
-                print(f"\n{'='*60}")
-                print(f"📊 [FeedingService] 开始执行投料分析任务 ({datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
-                print(f"{'='*60}")
-                
-                await self._analyze_feeding_job()
-                
-                print(f"✅ [FeedingService] 分析任务完成，下次运行在 {self.run_interval_minutes} 分钟后")
-            except Exception as e:
-                print(f"❌ [FeedingService] 分析任务异常: {e}")
-                import traceback
-                traceback.print_exc()
-            
-            # 等待设定的间隔
-            await asyncio.sleep(self.run_interval_minutes * 60)
+    每个料仓(7组)维护:
+    - 滑动窗口 deque(maxlen=_window_size) 存放 (weight, timestamp)
+    - 轮询计数器 (每 _calc_interval 次触发计算)
+    - 显示下料速度 (kg/h, 可负, 存DB + 推WS)
+    - 缓存下料量 (kg, 上一次正常窗口的逐点有效下降量, 仅内存)
+    - 投料总量累计 (kg, 存DB)
+    - 上料检测状态机
 
-    async def _analyze_feeding_job(self):
-        """执行具体的分析逻辑 (优化版 v2.1)"""
-        now = datetime.now(timezone.utc)
-        
-        # 优化: 边界扩展，避免漏检跨边界的投料事件
-        extended_window = self.query_window_minutes + self.boundary_extension
-        start_time = now - timedelta(minutes=extended_window)
-        
-        # 1. 获取所有料仓设备 (过滤 no_hopper)
-        hopper_devices = self._get_hopper_devices()
-        print(f"   📋 目标设备: {len(hopper_devices)} 台")
-        print(f"   🕐 时间范围: {start_time.strftime('%H:%M:%S')} → {now.strftime('%H:%M:%S')}")
-        
-        results = []
-        total_events = 0
-        
-        for device_id in hopper_devices:
-            # 延迟1秒，防止高并发查询
-            await asyncio.sleep(1)
-            
-            # 2. 查询历史数据
-            records = self._query_history_weights(device_id, start_time, now)
-            if not records:
-                print(f"      ⚠️  {device_id}: 无数据")
-                continue
-            
-            print(f"      🔍 {device_id}: 查询到 {len(records)} 个数据点")
-                
-            # 3. 计算投料量
-            feeding_events = self._detect_and_calculate_feeding(records, device_id)
-            if feeding_events:
-                results.extend(feeding_events)
-                total_events += len(feeding_events)
-                print(f"      ✅ {device_id}: 发现 {len(feeding_events)} 次投料")
+    算法参数通过 .env 动态配置:
+      FEEDING_WINDOW_SIZE  = 滑动窗口大小 (默认 36)
+      FEEDING_CALC_INTERVAL= 计算触发间隔 (默认 12)
+    """
 
-        # 4. 批量保存结果
-        if results:
-            self._save_feeding_records(results)
-            print(f"\n   💾 本次分析: 共发现 {total_events} 次投料事件")
-        else:
-            print(f"\n   ℹ️  本次分析: 未发现新的投料事件")
+    def __init__(self):
+        # 1. 从 settings 动态读取算法参数 (settings 单例在进程启动时加载一次)
+        self._window_size: int = settings.feeding_window_size
+        self._calc_interval: int = min(
+            settings.feeding_calc_interval, self._window_size
+        )
 
-    def _get_hopper_devices(self) -> List[str]:
-        """获取所有带料仓的设备ID"""
-        # 从 polling_service 的 latest_data 获取设备列表最准确
-        # 这里简化逻辑: 我们知道是 short_hopper_XX 和 long_hopper_XX
-        # 也可以从配置读取，或者硬编码已知ID规则
-        # 动态获取更好：
-        devices = []
-        latest = get_latest_data()
-        for device_id, data in latest.items():
-            if "no_hopper" in device_id:
-                continue
-            # 必须包含 weigh 模块
-            has_weigh = False
-            if 'modules' in data:
-                for m_data in data['modules'].values():
-                    if m_data.get('module_type') == 'WeighSensor':
-                        has_weigh = True
-                        break
-            
-            if has_weigh:
-                devices.append(device_id)
-        
-        # 如果还在启动中没数据，使用预设列表
-        if not devices:
-            return [
-                'short_hopper_1', 'short_hopper_2', 'short_hopper_3', 'short_hopper_4',
-                'long_hopper_1', 'long_hopper_2', 'long_hopper_3'
-            ]
-        return devices
+        # 2. 滑动窗口: deque(maxlen=_window_size) 存放 WeightSample
+        self._windows: Dict[str, deque] = {
+            dev: deque(maxlen=self._window_size) for dev in HOPPER_DEVICES
+        }
 
-    def _query_history_weights(self, device_id: str, start: datetime, end: datetime) -> List[Dict]:
-        """
-        查询重量历史数据
-        
-        Args:
-            device_id: 设备ID
-            start: 开始时间
-            end: 结束时间
-            
-        Returns:
-            List[Dict]: 数据点列表 [{"time": datetime, "value": float}, ...]
-        """
-        # 根据配置决定是否聚合
-        if self.use_raw_data:
-            # 使用原始数据 (6秒轮询间隔)
-            query = f'''
-            from(bucket: "{settings.influx_bucket}")
-                |> range(start: {start.isoformat().replace("+00:00", "Z")}, stop: {end.isoformat().replace("+00:00", "Z")})
-                |> filter(fn: (r) => r["_measurement"] == "sensor_data")
-                |> filter(fn: (r) => r["device_id"] == "{device_id}")
-                |> filter(fn: (r) => r["_field"] == "weight")
-                |> sort(columns: ["_time"])
-            '''
-        else:
-            # 使用聚合数据 (向后兼容)
-            query = f'''
-            from(bucket: "{settings.influx_bucket}")
-                |> range(start: {start.isoformat().replace("+00:00", "Z")}, stop: {end.isoformat().replace("+00:00", "Z")})
-                |> filter(fn: (r) => r["_measurement"] == "sensor_data")
-                |> filter(fn: (r) => r["device_id"] == "{device_id}")
-                |> filter(fn: (r) => r["_field"] == "weight")
-                |> aggregateWindow(every: 1m, fn: mean, createEmpty: false)
-                |> yield(name: "mean")
-            '''
-        
+        # 3. 轮询计数器
+        self._poll_count: Dict[str, int] = {
+            dev: 0 for dev in HOPPER_DEVICES
+        }
+
+        # 3. 显示下料速度 (kg/h, 可负)
+        self._display_feed_rate: Dict[str, float] = {
+            dev: 0.0 for dev in HOPPER_DEVICES
+        }
+
+        # 4. 缓存下料量 (kg): 上一次正常窗口(非上料)的逐点有效下降累加值
+        #    上料期间用此值补偿, 避免遗漏下料消耗
+        self._cached_drop: Dict[str, float] = {
+            dev: 0.0 for dev in HOPPER_DEVICES
+        }
+
+        # 5. 投料总量 (kg, 启动时从DB还原)
+        self._feeding_total: Dict[str, float] = {
+            dev: 0.0 for dev in HOPPER_DEVICES
+        }
+
+        # 6. 上料检测状态机
+        self._loading_state: Dict[str, LoadingState] = {
+            dev: LoadingState() for dev in HOPPER_DEVICES
+        }
+
+        self._restored = False
+
+    # ----------------------------------------------------------
+    # 1. 启动时还原投料总量
+    # ----------------------------------------------------------
+    async def restore_from_db(self):
+        """从 InfluxDB last() 还原7个投料总量, 重启后不清零"""
         try:
-            result = self.history_service.query_api.query(query)
-            data_points = []
+            client = get_influx_client()
+            query_api = client.query_api()
+            bucket = settings.influx_bucket
+
+            for dev in HOPPER_DEVICES:
+                query = f'''
+from(bucket: "{bucket}")
+    |> range(start: -90d)
+    |> filter(fn: (r) => r["_measurement"] == "feeding_cumulative")
+    |> filter(fn: (r) => r["device_id"] == "{dev}")
+    |> filter(fn: (r) => r["_field"] == "feeding_total")
+    |> last()
+'''
+                result = query_api.query(query)
+                for table in result:
+                    for record in table.records:
+                        val = float(record.get_value() or 0.0)
+                        self._feeding_total[dev] = val
+                        logger.info(f"[Feeding] {dev} 投料总量还原: {val:.1f} kg")
+
+            self._restored = True
+            logger.info("[Feeding] 投料总量还原完成")
+        except Exception as e:
+            logger.error(f"[Feeding] 还原投料总量失败: {e}", exc_info=True)
+
+    # ----------------------------------------------------------
+    # 2. 每次轮询推入样本 (由 polling_service 调用)
+    # ----------------------------------------------------------
+    def push_sample(self, device_id: str, weight: float, timestamp: datetime):
+        """
+        每次 PLC 轮询后调用, 推入重量样本到滑动窗口.
+        同时驱动上料检测状态机(逐点检测, 不等窗口满).
+        每 CALC_INTERVAL(12) 次触发速度和投料总量计算.
+        """
+        if device_id not in HOPPER_DEVICES:
+            return
+
+        if weight < MIN_VALID_WEIGHT:
+            return
+
+        sample = WeightSample(weight=weight, timestamp=timestamp)
+        window = self._windows[device_id]
+
+        # 逐点驱动上料检测状态机 (不等窗口, 实时检测)
+        if len(window) > 0:
+            prev_sample = window[-1]
+            self._update_loading_state(device_id, prev_sample, sample)
+
+        window.append(sample)
+        self._poll_count[device_id] += 1
+
+        # 每 _calc_interval 次触发计算
+        if self._poll_count[device_id] >= self._calc_interval:
+            self._poll_count[device_id] = 0
+            self._on_window_tick(device_id)
+
+    # ----------------------------------------------------------
+    # 3. 窗口触发计算 (每 _calc_interval 次轮询)
+    # ----------------------------------------------------------
+    def _on_window_tick(self, device_id: str):
+        """每 _calc_interval 次轮询触发: 计算显示下料速度 + 投料总量"""
+        window = self._windows[device_id]
+
+        if len(window) < 2:
+            return
+
+        # 3.1 计算显示下料速度 (整个窗口首尾差)
+        self._calc_display_feed_rate(device_id, window)
+
+        # 3.2 计算投料总量增量 (逐点累加 + 上料期间缓存补偿)
+        self._calc_feeding_total(device_id, window)
+
+        # 3.3 写显示下料速度 + 投料总量到 InfluxDB
+        self._write_cumulative_point(device_id, window[-1].timestamp)
+
+    # ----------------------------------------------------------
+    # 3.1 显示下料速度: 窗口首尾差 / 总时间
+    # ----------------------------------------------------------
+    def _calc_display_feed_rate(self, device_id: str, window: deque):
+        """显示下料速度 = (首重量 - 尾重量) * 3600 / 总时间(秒)
+        可正可负: 正=下料, 负=上料
+        """
+        w_first = window[0].weight
+        w_last = window[-1].weight
+        time_span_s = (window[-1].timestamp - window[0].timestamp).total_seconds()
+
+        if time_span_s <= 0:
+            return
+
+        # 先乘后除, 防止精度丢失
+        self._display_feed_rate[device_id] = round(
+            (w_first - w_last) * 3600 / time_span_s, 2
+        )
+
+    # ----------------------------------------------------------
+    # 3.2 投料总量: 逐点有效下降累加 + 上料期间缓存补偿
+    # ----------------------------------------------------------
+    def _calc_feeding_total(self, device_id: str, window: deque):
+        """
+        取最近 _calc_interval 个样本计算投料总量增量.
+
+        算法:
+        1. 对最近12个样本逐点比较, 累加所有有效下降量
+           (w[i] - w[i+1] > DEAD_ZONE_KG 视为有效下降)
+        2. 两态判断 (绑定上料状态机):
+           - 非上料状态(is_loading=False): 用逐点累加值, 同时更新缓存
+           - 上料状态(is_loading=True): 整个窗口用缓存值补偿
+             (上料期间窑仍在消耗料, 但称重全是上升, 用缓存补偿遗漏)
+        3. 投料总量只增不减
+        """
+        samples = list(window)
+        # 取最近 _calc_interval 个样本 (不足时取全部)
+        recent = samples[-self._calc_interval:] if len(samples) >= self._calc_interval else samples
+
+        if len(recent) < 2:
+            return
+
+        is_loading = self._loading_state[device_id].is_loading
+
+        if not is_loading:
+            # 正常状态: 逐点累加有效下降量
+            current_drop = 0.0
+            for i in range(len(recent) - 1):
+                drop = recent[i].weight - recent[i + 1].weight
+                if drop > DEAD_ZONE_KG:
+                    current_drop += drop
+
+            # 更新缓存 (记住正常窗口的下料量)
+            self._cached_drop[device_id] = round(current_drop, 2)
+            increment = current_drop
+        else:
+            # 上料状态: 整个窗口用缓存补偿
+            increment = self._cached_drop[device_id]
+
+        # 投料总量只增不减
+        if increment > 0:
+            self._feeding_total[device_id] = round(
+                self._feeding_total[device_id] + increment, 2
+            )
+
+    # ----------------------------------------------------------
+    # 4. 上料记录状态机 (逐点驱动)
+    # ----------------------------------------------------------
+    def _update_loading_state(
+        self, device_id: str, prev: WeightSample, curr: WeightSample
+    ):
+        """
+        逐点检测上料/停止上料:
+        - 连续上升 > LOADING_DEBOUNCE_COUNT: 触发上料开始
+        - 连续下降 > LOADING_DEBOUNCE_COUNT: 触发上料结束
+        - 上料结束时生成记录, 查DB合并(45分钟内)或新建
+        """
+        state = self._loading_state[device_id]
+        diff = curr.weight - prev.weight
+
+        if diff > DEAD_ZONE_KG:
+            # 上升
+            state.consecutive_rise += 1
+            state.consecutive_fall = 0
+        elif diff < -DEAD_ZONE_KG:
+            # 下降
+            state.consecutive_fall += 1
+            state.consecutive_rise = 0
+        else:
+            # 在死区内, 不重置计数 (允许微小抖动穿插)
+            pass
+
+        # 状态转换: 空闲 -> 上料
+        if not state.is_loading and state.consecutive_rise >= LOADING_DEBOUNCE_COUNT:
+            state.is_loading = True
+            state.loading_start_ts = prev.timestamp
+            state.min_weight = prev.weight
+            state.max_weight = curr.weight
+            state.consecutive_rise = 0
+            logger.info(
+                f"[Feeding] {device_id} 上料开始 "
+                f"| 时间: {prev.timestamp.isoformat()} "
+                f"| 最低重量: {state.min_weight:.1f} kg"
+            )
+
+        # 上料中: 持续更新最高/最低重量
+        if state.is_loading:
+            if curr.weight > state.max_weight:
+                state.max_weight = curr.weight
+            if curr.weight < state.min_weight:
+                state.min_weight = curr.weight
+
+        # 状态转换: 上料 -> 停止
+        if state.is_loading and state.consecutive_fall >= LOADING_DEBOUNCE_COUNT:
+            loading_amount = state.max_weight - state.min_weight
+            loading_end_ts = curr.timestamp
+
+            logger.info(
+                f"[Feeding] {device_id} 上料结束 "
+                f"| 上料量: {loading_amount:.1f} kg "
+                f"| 最低: {state.min_weight:.1f} -> 最高: {state.max_weight:.1f} "
+                f"| 时间: {state.loading_start_ts.isoformat()} ~ {loading_end_ts.isoformat()}"
+            )
+
+            # 写入或合并上料记录
+            if loading_amount > 0:
+                self._save_loading_record(
+                    device_id=device_id,
+                    amount=loading_amount,
+                    min_weight=state.min_weight,
+                    max_weight=state.max_weight,
+                    start_ts=state.loading_start_ts,
+                    end_ts=loading_end_ts,
+                )
+
+            # 重置状态
+            state.is_loading = False
+            state.consecutive_rise = 0
+            state.consecutive_fall = 0
+            state.loading_start_ts = None
+            state.min_weight = 0.0
+            state.max_weight = 0.0
+
+    # ----------------------------------------------------------
+    # 5. 上料记录写入 (合并或新建)
+    # ----------------------------------------------------------
+    def _save_loading_record(
+        self,
+        device_id: str,
+        amount: float,
+        min_weight: float,
+        max_weight: float,
+        start_ts: datetime,
+        end_ts: datetime,
+    ):
+        """
+        写入上料记录到 InfluxDB (measurement=feeding_records).
+        如果与最近一条记录间隔 < 45分钟, 则合并(累加 amount).
+        """
+        try:
+            client = get_influx_client()
+            bucket = settings.influx_bucket
+
+            # 查询最近一条上料记录
+            query_api = client.query_api()
+            query = f'''
+from(bucket: "{bucket}")
+    |> range(start: -2h)
+    |> filter(fn: (r) => r["_measurement"] == "feeding_records")
+    |> filter(fn: (r) => r["device_id"] == "{device_id}")
+    |> filter(fn: (r) => r["_field"] == "amount")
+    |> last()
+'''
+            last_record_ts = None
+            last_record_amount = 0.0
+
+            result = query_api.query(query)
             for table in result:
                 for record in table.records:
-                    val = record.get_value()
-                    if val is not None and val > 0:  # 过滤无效数据
-                        data_points.append({
-                            "time": record.get_time(),
-                            "value": float(val)
-                        })
-            
-            # 按时间排序
-            data_points.sort(key=lambda x: x['time'])
-            return data_points
-        except Exception as e:
-            print(f"      ❌ 查询 {device_id} 失败: {e}")
-            return []
+                    last_record_ts = record.get_time()
+                    last_record_amount = float(record.get_value() or 0.0)
 
-    def _detect_and_calculate_feeding(self, records: List[Dict], device_id: str) -> List[Point]:
-        """
-        核心算法: Valley-Peak-Compensation 投料检测算法 (v2.2 固定下料速度版)
-        
-        算法原理:
-        ┌─────────────────────────────────────────────────────────┐
-        │  投料过程示意图:                                          │
-        │                                                          │
-        │  Weight                                                  │
-        │    ▲                                                     │
-        │    │         Peak (投料结束)                             │
-        │    │          ●                                          │
-        │    │         ╱ ╲                                         │
-        │    │        ╱   ╲                                        │
-        │    │       ╱     ╲ (消耗下降)                            │
-        │    │      ╱       ╲                                      │
-        │    │     ╱ (投料)  ╲                                     │
-        │    │    ╱           ╲                                    │
-        │    │   ●             ●                                   │
-        │    │  Valley      Next Valley                            │
-        │    │  (投料开始)                                          │
-        │    └──────────────────────────────────► Time            │
-        │                                                          │
-        │  计算公式 (v2.2 固定下料速度):                             │
-        │  Total_Added = (Peak - Valley) + Compensation           │
-        │                                                          │
-        │  其中:                                                    │
-        │  - Valley: 投料前的最低点                                 │
-        │  - Peak: 投料后的最高点                                   │
-        │  - Compensation: 投料过程中的消耗补偿                      │
-        │    = 固定下料速度 (kg/秒) × 投料持续时间 (秒)              │
-        │    窑7654: 10 kg/h                                       │
-        │    窑839:  22 kg/h                                       │
-        └─────────────────────────────────────────────────────────┘
-        
-        逻辑流程:
-        1. 遍历数据点，寻找上升起点 (Valley)
-        2. 追踪连续上升区间 (Rising Edge)
-        3. 识别峰值点 (Peak)，带前瞻机制防止波动误判
-        4. 计算消耗补偿 (使用固定下料速度)
-        5. 计算总投料量 = 净增量 + 消耗补偿
-        6. 边缘保护: 跳过数据末尾未完成的投料事件 (不存数据库)
-        7. 去重机制: 检查是否已处理过该投料事件
-        
-        Args:
-            records: 重量数据点列表 [{"time": datetime, "value": float}, ...]
-            device_id: 设备ID
-            
-        Returns:
-            List[Point]: InfluxDB Point 列表
-        """
-        events = []
-        n = len(records)
-        if n < 3:  # 至少需要3个点 (PreValley, Valley, Peak)
-            return []
+            should_merge = False
+            if last_record_ts is not None:
+                # 确保时区一致再比较
+                compare_ts = start_ts
+                if compare_ts.tzinfo is None:
+                    compare_ts = compare_ts.replace(tzinfo=timezone.utc)
+                gap = abs((compare_ts - last_record_ts).total_seconds())
 
-        # 冷却期: 记录上一次检测到的 Peak 索引，避免重复检测
-        last_peak_idx = -1
-        
-        i = 1
-        while i < n:
-            # 跳过冷却期内的点
-            if i <= last_peak_idx:
-                i += 1
-                continue
-                
-            curr = records[i]
-            prev = records[i-1]
-            
-            # ============================================================
-            # 步骤1: 检测上升起点 (Valley)
-            # ============================================================
-            if curr['value'] > prev['value'] + self.rising_step_threshold:
-                valley_idx = i - 1
-                valley_val = prev['value']
-                valley_time = prev['time']
-                
-                # ============================================================
-                # 步骤2: 追踪连续上升区间 (Rising Edge)
-                # ============================================================
-                peak_idx = i
-                while peak_idx < n - 1:
-                    next_val = records[peak_idx + 1]['value']
-                    curr_val = records[peak_idx]['value']
-                    
-                    # 仍在上升
-                    if next_val >= curr_val:
-                        peak_idx += 1
-                        continue
-                    
-                    # 检测到下降，启动前瞻机制防止波动误判
-                    if next_val < curr_val:
-                        # 前瞻机制: 检查未来N个点是否有反弹
-                        is_fluctuation = False
-                        for k in range(1, self.lookahead_steps + 1):
-                            if peak_idx + 1 + k >= n:
-                                break
-                            future_val = records[peak_idx + 1 + k]['value']
-                            if future_val >= curr_val:
-                                # 发现反弹，说明是波动
-                                is_fluctuation = True
-                                peak_idx += k
-                                break
-                        
-                        if is_fluctuation:
-                            peak_idx += 1
-                            continue
-                        
-                        # 确认下降: 只有显著下降才认为投料结束
-                        drop_diff = curr_val - next_val
-                        if drop_diff > self.drop_threshold:
-                            break
-                    
-                    peak_idx += 1
-                
-                # ============================================================
-                # 步骤3: 边缘保护 (防止未完成的投料事件)
-                # ============================================================
-                if peak_idx >= n - 1:
-                    # 投料可能未结束，等待更多数据 (不存数据库)
-                    print(f"         ⏳ {device_id}: 投料未完成 (边缘数据)，等待下次分析")
-                    break
-                
-                peak_val = records[peak_idx]['value']
-                peak_time = records[peak_idx]['time']
-                raw_increase = peak_val - valley_val
-                
-                # ============================================================
-                # 步骤4: 阈值判断
-                # ============================================================
-                if raw_increase > self.min_feeding_threshold:
-                    # ============================================================
-                    # 步骤5: 去重检查 (v2.2 - 防止重复存储)
-                    # ============================================================
-                    event_key = (device_id, int(valley_time.timestamp()))
-                    if event_key in self.processed_events:
-                        print(f"         ⏭️  {device_id}: 投料事件已处理 (谷底={valley_time.strftime('%H:%M:%S')})，跳过")
-                        i = peak_idx + 1
-                        continue
-                    
-                    # 计算投料持续时间 (秒)
-                    duration_seconds = (peak_time - valley_time).total_seconds()
-                    
-                    # ============================================================
-                    # 步骤6: 计算消耗补偿 (v2.2 - 固定下料速度)
-                    # ============================================================
-                    feed_rate = self._get_feed_rate(device_id)  # kg/秒
-                    compensation = feed_rate * duration_seconds
-                    total_added = raw_increase + compensation
-                    
-                    # ============================================================
-                    # 步骤7: 构建 InfluxDB Point
-                    # ============================================================
-                    p = Point("feeding_records") \
-                        .tag("device_id", device_id) \
-                        .field("added_weight", float(total_added)) \
-                        .field("raw_increase", float(raw_increase)) \
-                        .field("compensation", float(compensation)) \
-                        .field("feed_rate_kg_per_hour", float(feed_rate * 3600)) \
-                        .field("duration_seconds", int(duration_seconds)) \
-                        .field("valley_weight", float(valley_val)) \
-                        .field("peak_weight", float(peak_val)) \
-                        .time(valley_time)  # 使用 Valley 时间戳实现去重
-                    
-                    events.append(p)
-                    
-                    # 标记为已处理
-                    self.processed_events[event_key] = True
-                    
-                    # 清理缓存 (防止内存溢出)
-                    if len(self.processed_events) > self.max_cache_size:
-                        # 删除最旧的一半
-                        keys_to_remove = list(self.processed_events.keys())[:self.max_cache_size // 2]
-                        for key in keys_to_remove:
-                            del self.processed_events[key]
-                    
-                    # 设置冷却期
-                    last_peak_idx = peak_idx
-                    i = peak_idx + 1
-                    
-                    print(f"         ✅ 投料事件: {valley_time.strftime('%H:%M:%S')} → {peak_time.strftime('%H:%M:%S')}, "
-                          f"投料量={total_added:.1f}kg (净增={raw_increase:.1f}kg, 补偿={compensation:.1f}kg, 下料速度={feed_rate*3600:.1f}kg/h)")
-                else:
-                    # 未超过阈值，继续
-                    i += 1
+                if gap < LOADING_MERGE_INTERVAL_S:
+                    should_merge = True
+
+            if should_merge:
+                # 合并: 使用旧记录时间戳, 累加上料量
+                merged_amount = round(last_record_amount + amount, 2)
+                write_ts = last_record_ts
+                logger.info(
+                    f"[Feeding] {device_id} 合并上料记录 "
+                    f"| 旧: {last_record_amount:.1f} + 新: {amount:.1f} = {merged_amount:.1f} kg"
+                )
+                final_amount = merged_amount
             else:
-                i += 1
-                
-        return events
+                write_ts = start_ts
+                final_amount = round(amount, 2)
 
-    def _get_feed_rate(self, device_id: str) -> float:
-        """
-        获取设备的固定下料速度 (v2.2)
-        
-        根据设备类型返回固定的下料速度:
-        - 窑7654 (short_hopper_1/2/3/4): 10 kg/h
-        - 窑839 (long_hopper_1/2/3): 22 kg/h
-        
-        Args:
-            device_id: 设备ID
-            
-        Returns:
-            float: 下料速度 (kg/秒)
-        """
-        if device_id.startswith("short_hopper"):
-            return self.feed_rate_short_hopper  # 10 kg/h
-        elif device_id.startswith("long_hopper"):
-            return self.feed_rate_long_hopper   # 22 kg/h
-        else:
-            # 默认值 (不应该到这里)
-            return self.feed_rate_short_hopper
+            # 写入记录
+            p = (
+                Point("feeding_records")
+                .tag("device_id", device_id)
+                .field("amount", final_amount)
+                .field("min_weight", round(min_weight, 2))
+                .field("max_weight", round(max_weight, 2))
+                .field("merged", should_merge)
+                .time(write_ts)
+            )
+            write_api = client.write_api(write_options=SYNCHRONOUS)
+            write_api.write(bucket=bucket, record=p)
 
-    def _calculate_consumption_rate(self, records: List[Dict], valley_idx: int, lookback: int = 5) -> float:
-        """
-        计算投料前的平均消耗速率 (已废弃 - v2.2 使用固定下料速度)
-        
-        保留此方法仅为向后兼容，实际不再使用
-        """
-        return 0.0  # 不再使用动态计算
-
-    def _filter_outliers(self, records: List[Dict], threshold: float = 3.0) -> List[Dict]:
-        """
-        过滤异常值 (已废弃 - v2.2 不再使用)
-        
-        保留此方法仅为向后兼容
-        """
-        return records  # 不再使用异常值过滤
-
-    def _save_feeding_records(self, points: List[Point]):
-        """
-        保存投料记录到 InfluxDB
-        
-        注意: InfluxDB 基于 (measurement, tags, timestamp) 的组合实现天然去重
-        相同时间戳的记录会被自动覆盖，无需手动去重
-        """
-        try:
-            write_api = self.history_service.client.write_api(write_options=SYNCHRONOUS)
-            write_api.write(bucket=settings.influx_bucket, record=points)
-            print(f"   💾 已保存 {len(points)} 条投料记录到 InfluxDB")
+            logger.info(
+                f"[Feeding] {device_id} 上料记录已写入 "
+                f"| amount={final_amount:.1f} kg | merged={should_merge}"
+            )
         except Exception as e:
-            print(f"   ❌ 保存投料记录失败: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"[Feeding] 写入上料记录失败 ({device_id}): {e}", exc_info=True)
+
+    # ----------------------------------------------------------
+    # 6. 写 InfluxDB: 显示下料速度 + 投料总量 (合并为一条写入)
+    # ----------------------------------------------------------
+    def _write_cumulative_point(self, device_id: str, timestamp: datetime):
+        """写显示下料速度和投料总量到 feeding_cumulative measurement"""
+        try:
+            p = (
+                Point("feeding_cumulative")
+                .tag("device_id", device_id)
+                .field("display_feed_rate", self._display_feed_rate[device_id])
+                .field("feeding_total", self._feeding_total[device_id])
+                .time(timestamp)
+            )
+            client = get_influx_client()
+            write_api = client.write_api(write_options=SYNCHRONOUS)
+            write_api.write(bucket=settings.influx_bucket, record=p)
+        except Exception as e:
+            logger.error(f"[Feeding] 写 InfluxDB 失败 ({device_id}): {e}", exc_info=True)
+
+    # ----------------------------------------------------------
+    # 7. 查询接口 (供 API / WebSocket 推送使用)
+    # ----------------------------------------------------------
+    def get_display_feed_rate(self, device_id: str) -> float:
+        """返回显示下料速度 (kg/h, 可负)"""
+        return self._display_feed_rate.get(device_id, 0.0)
+
+    def get_feeding_total(self, device_id: str) -> float:
+        """返回投料总量 (kg)"""
+        return self._feeding_total.get(device_id, 0.0)
+
+    def get_all_feeding_data(self) -> Dict[str, dict]:
+        """返回所有料仓的投料分析数据快照 (供 WebSocket 推送)"""
+        result = {}
+        for dev in HOPPER_DEVICES:
+            result[dev] = {
+                "display_feed_rate": self._display_feed_rate[dev],
+                "cached_drop": self._cached_drop[dev],
+                "feeding_total": self._feeding_total[dev],
+                "is_loading": self._loading_state[dev].is_loading,
+            }
+        return result
+
 
 # ============================================================
-# 单例导出
+# 全局单例
 # ============================================================
-feeding_service = FeedingAnalysisService()
-
-
-# ============================================================
-# 手动触发分析 (用于测试)
-# ============================================================
-async def manual_analyze_feeding(device_ids: Optional[List[str]] = None):
-    """
-    手动触发投料分析 (用于测试或前端手动刷新)
-    
-    Args:
-        device_ids: 指定设备ID列表，None表示分析所有设备
-        
-    Returns:
-        Dict: 分析结果统计
-    """
-    service = FeedingAnalysisService()
-    
-    now = datetime.now(timezone.utc)
-    start_time = now - timedelta(minutes=service.query_window_minutes)
-    
-    if device_ids is None:
-        device_ids = service._get_hopper_devices()
-    
-    results = []
-    stats = {
-        "total_devices": len(device_ids),
-        "devices_with_events": 0,
-        "total_events": 0,
-        "details": []
-    }
-    
-    for device_id in device_ids:
-        records = service._query_history_weights(device_id, start_time, now)
-        if not records:
-            continue
-        
-        feeding_events = service._detect_and_calculate_feeding(records, device_id)
-        if feeding_events:
-            results.extend(feeding_events)
-            stats["devices_with_events"] += 1
-            stats["total_events"] += len(feeding_events)
-            stats["details"].append({
-                "device_id": device_id,
-                "events_count": len(feeding_events)
-            })
-    
-    if results:
-        service._save_feeding_records(results)
-    
-    return stats
+feeding_analysis_service = FeedingAnalysisService()

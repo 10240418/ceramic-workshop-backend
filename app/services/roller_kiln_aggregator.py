@@ -64,7 +64,7 @@ class RollerKilnAggregator:
             
             fields = zone_module.get('fields', {})
             
-            # 🔧 修复：检查 fields 是否是嵌套字典（包含 'value' 键）
+            # [FIX] 修复：检查 fields 是否是嵌套字典（包含 'value' 键）
             # 如果是，提取 value；否则直接使用
             def get_field_value(field_name: str, default: float = 0.0) -> float:
                 field_data = fields.get(field_name, default)
@@ -155,7 +155,7 @@ class RollerKilnAggregator:
             
             fields = zone_module.get('fields', {})
             
-            # 🔧 修复：检查 fields 是否是嵌套字典（包含 'value' 键）
+            # [FIX] 修复：检查 fields 是否是嵌套字典（包含 'value' 键）
             def get_field_value(field_name: str, default: float = 0.0) -> float:
                 field_data = fields.get(field_name, default)
                 if isinstance(field_data, dict) and 'value' in field_data:

@@ -27,7 +27,7 @@ CONVERTER_MAP = {
     "WeighSensor": WeightConverter,
 }
 
-# 🔧 转换器实例缓存（转换器无状态，可以复用单例）
+# [FIX] 转换器实例缓存（转换器无状态，可以复用单例）
 _converter_cache = {}
 
 
@@ -47,7 +47,7 @@ def get_converter(module_type: str) -> BaseConverter:
     if module_type not in CONVERTER_MAP:
         raise ValueError(f"未知的模块类型: {module_type}")
     
-    # 🔧 使用缓存避免重复创建实例
+    # [FIX] 使用缓存避免重复创建实例
     if module_type not in _converter_cache:
         _converter_cache[module_type] = CONVERTER_MAP[module_type]()
     return _converter_cache[module_type]

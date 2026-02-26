@@ -5,6 +5,7 @@ from typing import Optional, List
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
+from app.core.unified_naming import parse_history_fields
 from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
     get_latest_data,
@@ -14,7 +15,7 @@ from app.services.polling_service import (
     is_polling_running
 )
 # 引入投料分析服务
-from app.services.feeding_analysis_service import manual_analyze_feeding
+from app.services.feeding_analysis_service import feeding_analysis_service
 # 引入 InfluxDB 写入
 from app.core.influxdb import get_influx_client, write_points_batch
 from influxdb_client import Point
@@ -22,7 +23,7 @@ from influxdb_client.client.write_api import SYNCHRONOUS
 from config import get_settings
 
 router = APIRouter(prefix="/api/hopper", tags=["料仓设备"])
-# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
+# [FIX] 删除模块级实例化，改为在函数内调用 get_history_service()
 
 
 HOPPER_TYPES = ["short_hopper", "no_hopper", "long_hopper"]
@@ -63,9 +64,9 @@ async def get_all_hoppers_realtime(
     """批量获取所有料仓的实时数据（从内存缓存读取，无需查询数据库）
     
     **优势**:
-    - 🚀 从内存缓存读取，响应速度极快（<1ms）
-    - 📊 适合大屏实时监控
-    - ⚡ 无数据库压力
+    - [START] 从内存缓存读取，响应速度极快（<1ms）
+    - [DATA] 适合大屏实时监控
+    - [重要] 无数据库压力
     
     **数据来源**: 内存缓存（由轮询服务实时更新）
     
@@ -188,9 +189,10 @@ async def get_hopper_history(
         example="WeighSensor"
     ),
     fields: Optional[str] = Query(None, description="字段筛选 (逗号分隔)", example="weight,feed_rate"),
-    interval: Optional[str] = Query("5m", description="聚合间隔", example="5m")
+    interval: Optional[str] = Query(None, description="聚合间隔（为空则自动计算）", example="5m"),
+    auto_interval: bool = Query(True, description="是否自动计算最佳聚合间隔")
 ):
-    """获取料仓设备的历史数据
+    """获取料仓设备的历史数据（支持动态聚合间隔）
     
     **可用字段**:
     - WeighSensor: `weight`, `feed_rate`
@@ -199,10 +201,16 @@ async def get_hopper_history(
     
     **时间范围**: 默认查询最近1小时
     
+    **动态聚合**:
+    - `auto_interval=true` (默认): 根据时间范围自动计算最佳聚合间隔
+    - `interval` 参数: 手动指定聚合间隔（如 "5s", "1m", "5m", "1h"）
+    - 目标数据点数: 40-150 点，理想值 80 点
+    
     **示例**:
     ```
-    GET /api/hopper/short_hopper_1/history
-    GET /api/hopper/short_hopper_1/history?module_type=WeighSensor&fields=weight,feed_rate
+    GET /api/hopper/short_hopper_1/history  # 自动聚合
+    GET /api/hopper/short_hopper_1/history?interval=5m  # 手动指定5分钟聚合
+    GET /api/hopper/short_hopper_1/history?auto_interval=false&interval=1m  # 强制1分钟聚合
     GET /api/hopper/short_hopper_1/history?start=2025-12-10T00:00:00&end=2025-12-10T12:00:00
     ```
     """
@@ -213,8 +221,8 @@ async def get_hopper_history(
         if not end:
             end = datetime.now()
         
-        # 解析字段列表
-        field_list = fields.split(",") if fields else None
+        # 解析并校验字段列表（仅保留统一数据库字段）
+        field_list = parse_history_fields(fields, module_type)
         
         data = get_history_service().query_device_history(
             device_id=device_id,
@@ -222,8 +230,26 @@ async def get_hopper_history(
             end=end,
             module_type=module_type,
             fields=field_list,
-            interval=interval
+            interval=interval,
+            auto_interval=auto_interval
         )
+        
+        # 计算实际使用的聚合间隔（用于返回给前端）
+        if auto_interval and interval is None:
+            # 重新计算以返回给前端
+            from app.tools.timezone_tools import BEIJING_TZ
+            import datetime as dt_module
+            
+            def to_utc(dt: datetime) -> datetime:
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=BEIJING_TZ)
+                return dt.astimezone(dt_module.timezone.utc).replace(tzinfo=None)
+            
+            start_utc = to_utc(start)
+            end_utc = to_utc(end)
+            actual_interval = get_history_service()._calculate_optimal_interval(start_utc, end_utc)
+        else:
+            actual_interval = interval or "1m"
         
         return ApiResponse.ok({
             "device_id": device_id,
@@ -231,11 +257,64 @@ async def get_hopper_history(
                 "start": start.isoformat(),
                 "end": end.isoformat()
             },
-            "interval": interval,
+            "interval": actual_interval,
+            "auto_interval": auto_interval,
+            "data_points": len(data),
             "data": data
         })
     except Exception as e:
         return ApiResponse.fail(f"查询失败: {str(e)}")
+
+
+# ============================================================
+# 2.5 GET /api/hopper/{device_id}/feeding-cumulative - 查询下料速度和投料总量历史
+# ============================================================
+@router.get("/{device_id}/feeding-cumulative")
+async def get_hopper_feeding_cumulative(
+    device_id: str = Path(..., description="设备ID (如 short_hopper_1)"),
+    start: Optional[datetime] = Query(None, description="开始时间"),
+    end: Optional[datetime] = Query(None, description="结束时间"),
+    fields: Optional[str] = Query(None, description="字段 (逗号分隔)", example="display_feed_rate,feeding_total"),
+    auto_interval: bool = Query(True, description="是否自动计算聚合间隔"),
+):
+    """
+    查询料仓的下料速度 (display_feed_rate) 和投料总量 (feeding_total) 历史
+
+    数据来源: feeding_cumulative measurement (由 feeding_analysis_service v5.0 写入)
+    
+    **可查询字段**:
+    - `display_feed_rate`: 显示下料速度 (kg/h, 可正可负)
+    - `feeding_total`: 投料总量 (kg, 只增不减)
+    """
+    try:
+        svc = get_history_service()
+        
+        if not start:
+            start = datetime.now() - timedelta(hours=24)
+        if not end:
+            end = datetime.now()
+        
+        field_list = fields.split(",") if fields else None
+        
+        data, actual_interval = svc.query_feeding_cumulative_history(
+            device_id=device_id,
+            start=start,
+            end=end,
+            fields=field_list,
+            auto_interval=auto_interval,
+        )
+        
+        return ApiResponse.ok({
+            "time_range": {
+                "start": start.isoformat(),
+                "end": end.isoformat(),
+            },
+            "interval": actual_interval,
+            "data_points": len(data),
+            "data": data,
+        })
+    except Exception as e:
+        return ApiResponse.fail(f"查询下料速度/投料总量失败: {str(e)}")
 
 
 # ============================================================
@@ -337,7 +416,7 @@ async def delete_hopper_feeding_record(
         # 确保时间为 UTC
         if time.tzinfo is None:
              # 如果传来的是 naive time (通常认为是北京时间)，转 UTC
-             from app.core.timezone_utils import BEIJING_TZ
+             from app.tools.timezone_tools import BEIJING_TZ
              time = time.replace(tzinfo=BEIJING_TZ).astimezone(datetime.timezone.utc)
         
         # 调用 InfluxDB 删除
@@ -380,7 +459,7 @@ async def purge_hopper_feeding_records(
     示例: DELETE /api/hopper/long_hopper_1/feeding-history/purge?start=2026-01-17T00:00:00&end=2026-01-19T00:00:00
     """
     try:
-        from app.core.timezone_utils import BEIJING_TZ
+        from app.tools.timezone_tools import BEIJING_TZ
         import datetime as dt_module
         
         # 确保时间为 UTC
@@ -413,45 +492,7 @@ async def purge_hopper_feeding_records(
 
 
 # ============================================================
-# 7. POST /api/hopper/feeding-analysis/trigger - 手动触发投料分析
-# ============================================================
-@router.post("/feeding-analysis/trigger")
-async def trigger_feeding_analysis(
-    device_ids: Optional[List[str]] = Query(
-        None,
-        description="指定设备ID列表，为空则分析所有料仓",
-        example=["short_hopper_1", "long_hopper_1"]
-    )
-):
-    """
-    手动触发投料分析任务
-    
-    **用途**:
-    - 前端手动刷新投料记录
-    - 测试投料分析算法
-    - 补充分析遗漏的数据
-    
-    **返回结果**:
-    ```json
-    {
-        "success": true,
-        "data": {
-            "total_devices": 7,
-            "devices_with_events": 3,
-            "total_events": 5,
-            "details": [
-                {"device_id": "short_hopper_1", "events_count": 2},
-                {"device_id": "long_hopper_2", "events_count": 3}
-            ]
-        }
-    }
-    ```
-    """
-    try:
-        stats = await manual_analyze_feeding(device_ids)
-        return ApiResponse.ok(stats)
-    except Exception as e:
-        return ApiResponse.fail(f"触发投料分析失败: {str(e)}")
+
 
 
 # ============================================================
@@ -460,29 +501,27 @@ async def trigger_feeding_analysis(
 @router.get("/feeding-analysis/status")
 async def get_feeding_analysis_status():
     """
-    获取投料分析服务的运行状态
-    
-    **返回信息**:
-    - 服务是否运行
-    - 检测频率
-    - 查询窗口
-    - 算法参数
+    获取投料分析服务 v6.0 的运行状态
+
+    返回: 7个料仓的 显示下料速度 / 投料总量 / 上料状态 / 缓存补偿量
     """
     try:
-        from app.services.feeding_analysis_service import feeding_service
-        
+        from app.services.feeding_analysis_service import (
+            feeding_analysis_service,
+            WINDOW_MAX_LEN,
+            CALC_INTERVAL,
+            DEAD_ZONE_KG,
+        )
+
         return ApiResponse.ok({
-            "is_running": feeding_service._is_running,
-            "run_interval_minutes": feeding_service.run_interval_minutes,
-            "query_window_minutes": feeding_service.query_window_minutes,
-            "use_raw_data": feeding_service.use_raw_data,
-            "algorithm_params": {
-                "min_feeding_threshold": feeding_service.min_feeding_threshold,
-                "rising_step_threshold": feeding_service.rising_step_threshold,
-                "drop_threshold": feeding_service.drop_threshold,
-                "lookahead_steps": feeding_service.lookahead_steps
-            }
+            "version": "v6.0",
+            "algorithm": "sliding_window",
+            "window_size": WINDOW_MAX_LEN,
+            "calc_interval": CALC_INTERVAL,
+            "dead_zone_kg": DEAD_ZONE_KG,
+            "devices": feeding_analysis_service.get_all_feeding_data(),
         })
     except Exception as e:
         return ApiResponse.fail(f"获取状态失败: {str(e)}")
+
 

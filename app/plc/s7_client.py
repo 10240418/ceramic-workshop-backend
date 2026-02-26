@@ -112,14 +112,14 @@ class S7Client:
 import threading
 
 _s7_client: Optional[S7Client] = None
-_s7_client_lock = threading.Lock()  # 🔧 添加线程锁
+_s7_client_lock = threading.Lock()  # [FIX] 添加线程锁
 
 
 def get_s7_client() -> S7Client:
     """获取S7客户端单例（线程安全）"""
     global _s7_client
     if _s7_client is None:
-        with _s7_client_lock:  # 🔧 双重检查锁定
+        with _s7_client_lock:  # [FIX] 双重检查锁定
             if _s7_client is None:
                 settings = get_settings()
                 _s7_client = S7Client(

@@ -3,7 +3,7 @@
 # ============================================================
 # 优化点:
 #   1. PLC 长连接 (避免频繁连接/断开)
-#   2. 批量写入 (30 次轮询缓存后批量写入)
+#   2. 批量写入 (动态配置的.env次轮询缓存后批量写入)
 #   3. 本地降级缓存 (InfluxDB 故障时写入 SQLite)
 #   4. 自动重试机制 (缓存数据自动重试)
 #   5. 内存缓存 (供 API 直接读取最新数据)
@@ -11,14 +11,17 @@
 # ============================================================
 
 import asyncio
+import logging
 import yaml
 from pathlib import Path
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List, Tuple
-from collections import deque, defaultdict
+from collections import deque
 
 from config import get_settings
-from app.core.timezone_utils import now_beijing, beijing_isoformat
+
+logger = logging.getLogger(__name__)
+from app.tools.timezone_tools import now_beijing, beijing_isoformat
 from app.core.influxdb import build_point, write_points_batch, check_influx_health
 from app.core.local_cache import get_local_cache, CachedPoint
 from app.plc.plc_manager import get_plc_manager
@@ -27,6 +30,7 @@ from app.plc.parser_roller_kiln import RollerKilnParser
 from app.plc.parser_scr_fan import SCRFanParser
 from app.tools import get_converter, CONVERTER_MAP
 from app.services.roller_kiln_aggregator import get_aggregator
+from app.services.alarm_checker import check_device_alarm
 
 settings = get_settings()
 
@@ -35,8 +39,10 @@ _mock_generator = None
 
 # 轮询任务句柄
 _polling_task: Optional[asyncio.Task] = None
+_realtime_polling_task: Optional[asyncio.Task] = None
+_status_polling_task: Optional[asyncio.Task] = None
 _retry_task: Optional[asyncio.Task] = None
-_cleanup_task: Optional[asyncio.Task] = None  # 🔧 添加清理任务句柄
+_cleanup_task: Optional[asyncio.Task] = None  # [FIX] 添加清理任务句柄
 _is_running = False
 
 # 解析器实例
@@ -48,16 +54,14 @@ _db_mappings: List[Dict[str, Any]] = []
 # 设备状态DB配置 (DB3/DB7/DB11 - 原始字节数据，前端解析)
 _device_status_db_configs: List[Dict[str, Any]] = []
 
-# 历史重量缓存 (用于计算下料速度)
-# key: "device_id:module_tag"
-# value: deque([w_t-60s, ..., w_t-5s], maxlen=12)
-_weight_queues: Dict[str, deque] = defaultdict(lambda: deque(maxlen=12))
+# 投料分析服务 (v5.0 滑动窗口, 由 push_sample 驱动)
+from app.services.feeding_analysis_service import feeding_analysis_service
 
 # ============================================================
 # 最新数据缓存 (供 API 直接读取，避免查询数据库)
 # ============================================================
 import threading
-_data_lock = threading.Lock()  # 🔧 添加数据访问锁
+_data_lock = threading.Lock()  # [FIX] 添加数据访问锁
 _latest_data: Dict[str, Any] = {}  # 最新的设备数据 {device_id: {...}}
 _latest_timestamp: Optional[datetime] = None  # 最新数据时间戳
 
@@ -72,19 +76,49 @@ _device_status_raw: Dict[str, Dict[str, Any]] = {}
 # ============================================================
 _point_buffer: deque = deque(maxlen=1000)  # 最大缓存 1000 个点
 _buffer_count = 0
-_batch_size = 10  # 🔧 [CRITICAL] 10次轮询后批量写入（每次~46点，10次=460点）
-                   # 缩小批次避免批量写入阻塞 API 请求过久
+_batch_size = 10  # 在 start_polling() 中由 settings.batch_write_size 初始化
+                   # 每次轮询约47个数据点，10次批量写入约470点
 
-# 🔧 [NEW] 后台写入任务控制
+# [FIX] [NEW] 后台写入任务控制
 _write_queue: asyncio.Queue = None  # 写入队列（异步）
 _write_task: Optional[asyncio.Task] = None  # 后台写入任务
 _write_in_progress = False  # 是否正在写入
+_mock_data_lock: Optional[asyncio.Lock] = None
+_latest_mock_db_data: Optional[Dict[int, bytes]] = None
+
+# WebSocket 事件通知: 两个独立事件，分别对应两个轮询频道
+_realtime_updated_event: Optional[asyncio.Event] = None   # DB8/9/10 有新数据
+_status_updated_event: Optional[asyncio.Event] = None     # DB3/7/11 有新数据
+
+
+def get_realtime_updated_event() -> asyncio.Event:
+    """实时数据更新事件 (realtime 频道的推送任务监听)"""
+    global _realtime_updated_event
+    if _realtime_updated_event is None:
+        _realtime_updated_event = asyncio.Event()
+    return _realtime_updated_event
+
+
+def get_status_updated_event() -> asyncio.Event:
+    """设备状态更新事件 (device_status 频道的推送任务监听)"""
+    global _status_updated_event
+    if _status_updated_event is None:
+        _status_updated_event = asyncio.Event()
+    return _status_updated_event
+
+
+def get_data_updated_event() -> asyncio.Event:
+    """兼容旧调用: 返回 realtime 事件（旧 _poll_data 路径使用）"""
+    return get_realtime_updated_event()
+
 
 # ============================================================
 # 统计信息
 # ============================================================
 _stats = {
     "total_polls": 0,
+    "realtime_polls": 0,
+    "status_polls": 0,
     "successful_writes": 0,
     "failed_writes": 0,
     "cached_points": 0,
@@ -106,10 +140,11 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
     """
     global _db_mappings, _device_status_db_configs
     
-    config_path = Path("configs/db_mappings.yaml")
+    from config import get_runtime_base_dir
+    config_path = get_runtime_base_dir() / "configs" / "db_mappings.yaml"
     
     if not config_path.exists():
-        print(f"⚠️  配置文件不存在: {config_path}，使用默认配置")
+        print(f"[WARN]  配置文件不存在: {config_path}，使用默认配置")
         return [(6, 554)]
     
     try:
@@ -122,14 +157,16 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
         device_status_config = config.get('device_status_config', {})
         if device_status_config.get('enabled', False):
             _device_status_db_configs = device_status_config.get('db_blocks', [])
-            print(f"✅ 设备状态位监控已启用: {len(_device_status_db_configs)}个DB块")
+            print(f"[INFO] 设备状态位监控已启用: {len(_device_status_db_configs)}个DB块")
             for db_cfg in _device_status_db_configs:
                 print(f"   - DB{db_cfg['db_number']}: {db_cfg['db_name']} ({db_cfg['total_size']}字节)")
         
         # 加载轮询配置
         polling_config = config.get('polling_config', {})
-        poll_interval = polling_config.get('poll_interval', 6)
-        print(f"📊 轮询间隔: {poll_interval}秒")
+        poll_interval = float(polling_config.get('poll_interval', 6))
+        realtime_poll_interval = float(polling_config.get('realtime_poll_interval', poll_interval))
+        status_poll_interval = float(polling_config.get('status_poll_interval', poll_interval))
+        print(f"[DATA] 轮询间隔配置: realtime={realtime_poll_interval}s, status={status_poll_interval}s, 兼容poll_interval={poll_interval}s")
         
         # 只返回启用的DB块配置
         enabled_configs = [
@@ -138,7 +175,7 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
             if mapping.get('enabled', True)
         ]
         
-        print(f"✅ 加载DB映射配置: {len(enabled_configs)}个DB块")
+        print(f"[INFO] 加载DB映射配置: {len(enabled_configs)}个DB块")
         for db_num, size in enabled_configs:
             mapping = next(m for m in _db_mappings if m['db_number'] == db_num)
             print(f"   - DB{db_num}: {mapping['db_name']} ({size}字节)")
@@ -146,8 +183,40 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
         return enabled_configs
     
     except Exception as e:
-        print(f"❌ 加载DB映射配置失败: {e}，使用默认配置")
+        print(f"[ERROR] 加载DB映射配置失败: {e}，使用默认配置")
         return [(6, 554)]
+
+
+async def _next_mock_db_data(*, advance: bool, interval_s: float) -> Dict[int, bytes]:
+    """线程安全获取 Mock DB 数据
+
+    Args:
+        advance: True=推进一帧（仅实时轮询调用），False=读取当前快照（状态轮询调用）
+        interval_s: 推进帧使用的时间间隔（秒）
+    """
+    global _mock_generator, _mock_data_lock, _latest_mock_db_data
+
+    if _mock_generator is None:
+        from app.services.mock_service import MockService
+        _mock_generator = MockService()
+
+    if _mock_data_lock is None:
+        _mock_data_lock = asyncio.Lock()
+
+    async with _mock_data_lock:
+        if advance:
+            _latest_mock_db_data = _mock_generator.generate_all_db_data(
+                advance=True,
+                poll_interval_s=interval_s,
+            )
+            return _latest_mock_db_data
+
+        if _latest_mock_db_data is None:
+            _latest_mock_db_data = _mock_generator.generate_all_db_data(
+                advance=True,
+                poll_interval_s=interval_s,
+            )
+        return _latest_mock_db_data
 
 
 # ------------------------------------------------------------
@@ -174,9 +243,9 @@ def _init_parsers():
         
         if parser_class_name in parser_classes:
             _parsers[db_number] = parser_classes[parser_class_name]()
-            print(f"   ✅ DB{db_number} -> {parser_class_name}")
+            print(f"   [INFO] DB{db_number} -> {parser_class_name}")
         else:
-            print(f"   ⚠️  未知的解析器类: {parser_class_name}")
+            print(f"   [WARN]  未知的解析器类: {parser_class_name}")
 
 
 # ============================================================
@@ -194,13 +263,13 @@ def _flush_buffer():
     _point_buffer.clear()
     _buffer_count = 0
     
-    # 🔧 [CRITICAL] 将数据放入异步队列，不阻塞当前线程
+    # [FIX] [CRITICAL] 将数据放入异步队列，不阻塞当前线程
     if _write_queue is not None:
         try:
             _write_queue.put_nowait(points)
-            print(f"📤 已将 {len(points)} 个数据点加入写入队列")
+            print(f"[SEND] 已将 {len(points)} 个数据点加入写入队列")
         except asyncio.QueueFull:
-            print(f"⚠️ 写入队列已满，数据转存到本地缓存")
+            print(f"[WARN] 写入队列已满，数据转存到本地缓存")
             _save_to_local_cache(points)
     else:
         # 队列未初始化，使用同步写入（降级）
@@ -218,20 +287,20 @@ def _sync_write_to_influx(points: List):
         if success:
             _stats["successful_writes"] += len(points)
             _stats["last_write_time"] = beijing_isoformat()
-            print(f"✅ 批量写入 {len(points)} 个数据点到 InfluxDB")
+            print(f"[INFO] 批量写入 {len(points)} 个数据点到 InfluxDB")
         else:
-            print(f"❌ InfluxDB 写入失败: {err}，转存到本地缓存")
+            print(f"[ERROR] InfluxDB 写入失败: {err}，转存到本地缓存")
             _save_to_local_cache(points)
     else:
-        print(f"⚠️ InfluxDB 不可用 ({msg})，数据写入本地缓存")
+        print(f"[WARN] InfluxDB 不可用 ({msg})，数据写入本地缓存")
         _save_to_local_cache(points)
 
 
 async def _background_writer():
-    """🔧 [NEW] 后台写入任务 - 异步处理写入队列，不阻塞 API"""
+    """[FIX] [NEW] 后台写入任务 - 异步处理写入队列，不阻塞 API"""
     global _stats, _write_in_progress, _write_queue
     
-    print("🚀 后台写入任务已启动")
+    print("[START] 后台写入任务已启动")
     
     while _is_running:
         try:
@@ -256,27 +325,27 @@ async def _background_writer():
                 if success:
                     _stats["successful_writes"] += len(points)
                     _stats["last_write_time"] = beijing_isoformat()
-                    print(f"✅ [后台] 批量写入 {len(points)} 个数据点到 InfluxDB")
+                    print(f"[INFO] [后台] 批量写入 {len(points)} 个数据点到 InfluxDB")
                 else:
-                    print(f"❌ [后台] InfluxDB 写入失败: {err}，转存到本地缓存")
+                    print(f"[ERROR] [后台] InfluxDB 写入失败: {err}，转存到本地缓存")
                     _save_to_local_cache(points)
             else:
                 # InfluxDB 不可用，保存到本地
-                print(f"⚠️ [后台] InfluxDB 不可用 ({msg})，数据写入本地缓存")
+                print(f"[WARN] [后台] InfluxDB 不可用 ({msg})，数据写入本地缓存")
                 _save_to_local_cache(points)
             
             _write_in_progress = False
             _write_queue.task_done()
             
         except asyncio.CancelledError:
-            print("🛑 后台写入任务已取消")
+            print("[STOP] 后台写入任务已取消")
             break
         except Exception as e:
-            print(f"❌ [后台] 写入任务异常: {e}")
+            print(f"[ERROR] [后台] 写入任务异常: {e}")
             _write_in_progress = False
             await asyncio.sleep(1)  # 出错后等待 1 秒再继续
     
-    print("🛑 后台写入任务已停止")
+    print("[STOP] 后台写入任务已停止")
 
 
 def _save_to_local_cache(points: List):
@@ -300,7 +369,7 @@ def _save_to_local_cache(points: List):
     _stats["cached_points"] += saved_count
     _stats["failed_writes"] += len(points)
     
-    print(f"💾 已保存 {saved_count} 个数据点到本地缓存")
+    print(f"[CACHE] 已保存 {saved_count} 个数据点到本地缓存")
 
 
 # ============================================================
@@ -327,7 +396,7 @@ async def _retry_cached_data():
         if not pending:
             continue
         
-        print(f"🔄 开始重试 {len(pending)} 条缓存数据...")
+        print(f"[RETRY] 开始重试 {len(pending)} 条缓存数据...")
         
         # 重新构建 Point 对象
         points = []
@@ -345,7 +414,7 @@ async def _retry_cached_data():
                     points.append(point)
                     ids.append(point_id)
             except Exception as e:
-                print(f"⚠️ 重建 Point 失败: {e}")
+                print(f"[WARN] 重建 Point 失败: {e}")
         
         if not points:
             continue
@@ -357,14 +426,14 @@ async def _retry_cached_data():
             cache.mark_success(ids)
             _stats["retry_success"] += len(points)
             _stats["last_retry_time"] = beijing_isoformat()
-            print(f"✅ 重试成功: {len(points)} 条数据已写入 InfluxDB")
+            print(f"[INFO] 重试成功: {len(points)} 条数据已写入 InfluxDB")
         else:
             cache.mark_retry(ids)
-            print(f"❌ 重试失败: {err}")
+            print(f"[ERROR] 重试失败: {err}")
 
 
 # ============================================================
-# 🔧 定期清理任务（每小时执行）
+# [FIX] 定期清理任务（每小时执行）
 # ============================================================
 async def _periodic_cleanup():
     """定期清理过期缓存和执行内存维护"""
@@ -382,60 +451,153 @@ async def _periodic_cleanup():
             import gc
             gc.collect()  # 强制垃圾回收
             
-            print(f"🧹 定期清理完成 | 设备缓存: {len(_latest_data)} | 重量历史(Rows): {len(_weight_queues)}")
+            print(f"[CLEANUP] 定期清理完成 | 设备缓存: {len(_latest_data)}")
         except Exception as e:
-            print(f"⚠️ 定期清理任务异常: {e}")
+            print(f"[WARN] 定期清理任务异常: {e}")
 
 
-# ============================================================
-# 主轮询循环
-# ============================================================
-async def _poll_data():
-    """轮询DB块数据并写入InfluxDB（动态配置）
-    
-    支持两种模式:
-    - 正常模式: 从真实PLC读取数据
-    - Mock模式: 使用MockDataGenerator生成模拟数据
-    """
-    global _buffer_count, _stats, _latest_data, _latest_timestamp, _mock_generator, _device_status_raw
-    
-    # 从配置文件加载DB块配置
+
+
+async def _poll_realtime_data_loop():
+    """轮询实时数据 DB8/DB9/DB10（独立任务）"""
+    global _stats
+
     db_configs = _load_db_mappings()
-    
+
     poll_count = 0
-    
-    # 根据模式初始化数据源
-    if settings.mock_mode:
-        # Mock模式：使用模拟数据生成器
-        import sys
-        sys.path.insert(0, str(Path(__file__).parent.parent.parent / "tests" / "mock"))
-        from mock_data_generator import MockDataGenerator
-        _mock_generator = MockDataGenerator()
-        print("🎭 Mock模式已启用 - 使用模拟数据")
-        plc = None
-    else:
-        # 正常模式：使用真实PLC
-        plc = get_plc_manager()
-    
+
+    plc = None if settings.mock_mode else get_plc_manager()
+
     while _is_running:
         poll_count += 1
-        timestamp = now_beijing()
         _stats["total_polls"] += 1
-        
+        _stats["realtime_polls"] += 1
+
+        timestamp = now_beijing()
+        realtime_interval = float(settings.realtime_poll_interval)
         try:
-            # ============================================================
-            # Step 1: 读取设备状态位 DB3/DB7/DB11 (原始数据，前端解析)
-            # ============================================================
-            if settings.mock_mode and _mock_generator:
-                # Mock模式：从生成器获取状态位数据
-                mock_db_data = _mock_generator.generate_all_db_data()
-                
-                # 更新设备状态位原始数据缓存
+            from app.routers.config import get_runtime_plc_config
+            plc_config = get_runtime_plc_config()
+            realtime_interval = float(
+                plc_config.get("realtime_poll_interval", plc_config.get("poll_interval", settings.realtime_poll_interval))
+            )
+        except Exception:
+            pass
+
+        try:
+            all_devices = []
+
+            if settings.mock_mode:
+                mock_db_data = await _next_mock_db_data(advance=True, interval_s=realtime_interval)
+                for db_num, size in db_configs:
+                    db_data = mock_db_data.get(db_num)
+                    if db_data is None:
+                        continue
+
+                    if db_num in _parsers:
+                        devices = _parsers[db_num].parse_all(db_data)
+                        all_devices.extend(devices)
+                        for device in devices:
+                            _update_latest_data(device, db_num, timestamp)
+            else:
+                for db_num, size in db_configs:
+                    success, db_data, err = plc.read_db(db_num, 0, size)
+                    if not success:
+                        print(f"[ERROR] DB{db_num} 读取失败: {err}")
+                        continue
+
+                    if db_num in _parsers:
+                        devices = _parsers[db_num].parse_all(db_data)
+                        all_devices.extend(devices)
+                        for device in devices:
+                            _update_latest_data(device, db_num, timestamp)
+
+            global _latest_timestamp, _buffer_count
+            _latest_timestamp = timestamp
+
+            # [TEST] 触发WebSocket推送事件
+            get_realtime_updated_event().set()
+            logger.info(f"[TEST][POLL→WS] 实时数据轮询完成 | 设备数={len(all_devices)} | 触发WebSocket推送事件")
+
+            written_count = 0
+            for device in all_devices:
+                count = _add_device_to_buffer(
+                    device,
+                    all_devices[0].get('db_number', 8) if all_devices else 8,
+                    timestamp,
+                )
+                written_count += count
+
+                if device.get('device_id') == 'roller_kiln_1':
+                    aggregator = get_aggregator()
+
+                    total_point = aggregator.aggregate_zones(device, timestamp)
+                    if total_point:
+                        _point_buffer.append(total_point)
+                        written_count += 1
+
+                    total_cache = aggregator.aggregate_zones_for_cache(device, timestamp)
+                    if total_cache:
+                        with _data_lock:
+                            _latest_data['roller_kiln_total'] = total_cache
+
+            _buffer_count += 1
+
+            buffer_usage = len(_point_buffer) / 1000
+            if buffer_usage > 0.5:
+                print(f"[WARN] 缓冲区使用率过高: {buffer_usage*100:.1f}% (将触发批量写入)")
+
+            if _buffer_count >= _batch_size or len(_point_buffer) >= 500:
+                _flush_buffer()
+
+            if settings.verbose_polling_log or poll_count % 10 == 0:
+                cache_stats = get_local_cache().get_stats()
+                print(f"[DATA][realtime][poll #{poll_count}] "
+                      f"设备: {len(all_devices)} | "
+                      f"数据点: {written_count} | "
+                      f"批次进度={_buffer_count}/{_batch_size}次 | "
+                      f"缓冲点={len(_point_buffer)} | "
+                      f"待重试={cache_stats['pending_count']}")
+
+        except Exception as e:
+            print(f"[ERROR][realtime][poll #{poll_count}] 轮询异常: {e}")
+            import traceback
+            traceback.print_exc()
+
+        await asyncio.sleep(realtime_interval)
+
+
+async def _poll_device_status_loop():
+    """轮询设备状态位 DB3/DB7/DB11（独立任务）"""
+    global _stats, _device_status_raw
+
+    poll_count = 0
+
+    plc = None if settings.mock_mode else get_plc_manager()
+
+    while _is_running:
+        poll_count += 1
+        _stats["status_polls"] += 1
+
+        timestamp = now_beijing()
+        status_interval = float(settings.status_poll_interval)
+        try:
+            from app.routers.config import get_runtime_plc_config
+            plc_config = get_runtime_plc_config()
+            status_interval = float(
+                plc_config.get("status_poll_interval", plc_config.get("poll_interval", settings.status_poll_interval))
+            )
+        except Exception:
+            pass
+
+        try:
+            if settings.mock_mode:
+                mock_db_data = await _next_mock_db_data(advance=False, interval_s=status_interval)
                 for db_cfg in _device_status_db_configs:
                     db_num = db_cfg['db_number']
                     db_name = db_cfg['db_name']
                     db_size = db_cfg['total_size']
-                    
+
                     raw_data = mock_db_data.get(db_num)
                     if raw_data:
                         _device_status_raw[f"db{db_num}"] = {
@@ -443,18 +605,14 @@ async def _poll_data():
                             "db_name": db_name,
                             "size": db_size,
                             "raw_data": raw_data[:db_size] if len(raw_data) >= db_size else raw_data,
-                            "timestamp": timestamp.isoformat()
+                            "timestamp": timestamp.isoformat(),
                         }
-                    
-                # 保存mock_db_data供Step 2使用（避免重复生成）
-                _current_mock_db_data = mock_db_data
             elif not settings.mock_mode and plc:
-                # 正常模式：从PLC读取设备状态位 DB3/DB7/DB11
                 for db_cfg in _device_status_db_configs:
                     db_num = db_cfg['db_number']
                     db_name = db_cfg['db_name']
                     db_size = db_cfg['total_size']
-                    
+
                     success, raw_data, err = plc.read_db(db_num, 0, db_size)
                     if success and raw_data:
                         _device_status_raw[f"db{db_num}"] = {
@@ -462,116 +620,23 @@ async def _poll_data():
                             "db_name": db_name,
                             "size": db_size,
                             "raw_data": raw_data,
-                            "timestamp": timestamp.isoformat()
+                            "timestamp": timestamp.isoformat(),
                         }
                     elif not success and poll_count % 10 == 1:
-                        print(f"⚠️ 设备状态块 DB{db_num} 读取失败: {err}")
-                
-                _current_mock_db_data = None
-            else:
-                _current_mock_db_data = None
-            
-            # ============================================================
-            # Step 2: 读取所有 DB 块数据
-            # ============================================================
-            all_devices = []
-            
-            if settings.mock_mode and _mock_generator:
-                # Mock模式：使用Step 1已生成的数据（避免重复调用generate_all_db_data）
-                mock_db_data = _current_mock_db_data if _current_mock_db_data else _mock_generator.generate_all_db_data()
-                
-                for db_num, size in db_configs:
-                    db_data = mock_db_data.get(db_num)
-                    if db_data is None:
-                        continue
-                    
-                    # 解析设备数据
-                    if db_num in _parsers:
-                        devices = _parsers[db_num].parse_all(db_data)
-                        all_devices.extend(devices)
-                        
-                        # 更新内存缓存
-                        for device in devices:
-                            _update_latest_data(device, db_num, timestamp)
-            else:
-                # 正常模式：从PLC读取数据
-                for db_num, size in db_configs:
-                    # 使用长连接读取
-                    success, db_data, err = plc.read_db(db_num, 0, size)
-                    
-                    if not success:
-                        print(f"❌ DB{db_num} 读取失败: {err}")
-                        continue
-                    
-                    # 解析设备数据
-                    if db_num in _parsers:
-                        devices = _parsers[db_num].parse_all(db_data)
-                        all_devices.extend(devices)
-                        
-                        # 更新内存缓存
-                        for device in devices:
-                            _update_latest_data(device, db_num, timestamp)
-            
-            # 更新时间戳
-            _latest_timestamp = timestamp
-            
-            # 将数据加入写入缓冲区
-            written_count = 0
-            for device in all_devices:
-                count = _add_device_to_buffer(device, all_devices[0].get('db_number', 8) if all_devices else 8, timestamp)
-                written_count += count
-                
-                # 🔧 如果是辊道窑设备，计算并添加总表数据
-                if device.get('device_id') == 'roller_kiln_1':
-                    aggregator = get_aggregator()
-                    
-                    # 生成总表数据点（用于写入数据库）
-                    total_point = aggregator.aggregate_zones(device, timestamp)
-                    if total_point:
-                        _point_buffer.append(total_point)
-                        written_count += 1
-                    
-                    # 生成总表缓存数据（用于API读取）
-                    total_cache = aggregator.aggregate_zones_for_cache(device, timestamp)
-                    if total_cache:
-                        with _data_lock:
-                            _latest_data['roller_kiln_total'] = total_cache
-            
-            # 检查是否需要批量写入
-            _buffer_count += 1
-            
-            # 🔧 [CRITICAL] 缓冲区告警阈值降低（防止阻塞 API 请求）
-            buffer_usage = len(_point_buffer) / 1000
-            if buffer_usage > 0.5:  # 50% 告警（从 80% 降低）
-                print(f"⚠️ 缓冲区使用率过高: {buffer_usage*100:.1f}% (将触发批量写入)")
-            
-            # 🔧 [CRITICAL] 触发批量写入：达到批次数或缓冲区>500个点（防止阻塞过久）
-            # 原: _buffer_count >= 20 or len(_point_buffer) >= 800
-            # 新: _buffer_count >= 10 or len(_point_buffer) >= 500
-            if _buffer_count >= _batch_size or len(_point_buffer) >= 500:
-                _flush_buffer()
-            
-            # 日志输出
-            if settings.verbose_polling_log or poll_count % 10 == 0:
-                cache_stats = get_local_cache().get_stats()
-                print(f"📊 [poll #{poll_count}] "
-                      f"设备: {len(all_devices)} | "
-                      f"数据点: {written_count} | "
-                      f"缓冲区={len(_point_buffer)}/{_batch_size} | "
-                      f"待重试={cache_stats['pending_count']}")
-        
+                        print(f"[WARN] 设备状态块 DB{db_num} 读取失败: {err}")
+
+            get_status_updated_event().set()
+
+            if settings.verbose_polling_log or poll_count % 20 == 0:
+                print(f"[DATA][status][poll #{poll_count}] 状态块缓存: {len(_device_status_raw)}")
+
         except Exception as e:
-            print(f"❌ [poll #{poll_count}] 轮询异常: {e}")
+            _stats["status_errors"] += 1
+            print(f"[ERROR][status][poll #{poll_count}] 状态位轮询异常: {e}")
             import traceback
             traceback.print_exc()
-        
-        # 使用运行时配置的轮询间隔（支持热更新）
-        try:
-            from app.routers.config import get_runtime_plc_config
-            plc_config = get_runtime_plc_config()
-            await asyncio.sleep(plc_config["poll_interval"])
-        except:
-            await asyncio.sleep(settings.plc_poll_interval)
+
+        await asyncio.sleep(status_interval)
 
 
 # ============================================================
@@ -585,7 +650,7 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
         db_number: DB块号
         timestamp: 时间戳
     """
-    global _latest_data, _weight_queues
+    global _latest_data
     
     device_id = device_data['device_id']
     device_type = device_data['device_type']
@@ -601,55 +666,23 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
         if module_type in CONVERTER_MAP:
             converter = get_converter(module_type)
             
-            # 称重模块需要传入历史数据
             if module_type == 'WeighSensor':
-                previous_weight = None
-                poll_interval = 5.0 # 默认间隔
+                # 称重模块: 只做重量转换, feed_rate 由 feeding_analysis_service 负责
+                fields = converter.convert(raw_fields)
                 
-                # 只有有料仓的设备才查数据库（优化：过滤 no_hopper）
-                should_query_db = "no_hopper" not in device_id
+                # 推送到投料分析服务 (驱动滑动窗口 + 上料检测)
+                weight_val = fields.get('weight', 0.0)
+                if weight_val > 0 and "no_hopper" not in device_id:
+                    feeding_analysis_service.push_sample(device_id, weight_val, timestamp)
                 
-                try:
-                    if should_query_db:
-                        from app.services.history_query_service import HistoryQueryService
-                        # 1. 优先策略：从数据库查询30分钟前的重量数据
-                        # 计算公式：(前值 - 当前值) / 时间间隔(30m)
-                        target_time = datetime.now(timezone.utc) - timedelta(minutes=30)
-                        hqs = HistoryQueryService()
-                        
-                        hist_weight = hqs.query_weight_at_timestamp(device_id, target_time)
-                        
-                        if hist_weight is not None:
-                            previous_weight = hist_weight
-                            poll_interval = 1800.0 # 30分钟
-                except Exception:
-                    pass # 数据库查询失败，静默降级
-                
-                # 2. 降级备用策略：如果数据库没查到，或者是不需要查库的设备
-                if previous_weight is None:
-                    cache_key = f"{device_id}:{module_tag}"
-                    q = _weight_queues[cache_key]
-                    if len(q) > 0:
-                        # 取队列最老的数据 (Index 0)
-                        # 如果队列满(12个)，则是 12*5 = 60秒前的数据
-                        previous_weight = q[0]
-                        poll_interval = len(q) * settings.plc_poll_interval
-
-                # 执行转换
-                fields = converter.convert(
-                    raw_fields,
-                    previous_weight=previous_weight,
-                    interval=poll_interval
-                )
-                
-                # 更新本地短时历史队列
-                # 将当前计算出的重量存入队列末尾
-                cache_key = f"{device_id}:{module_tag}"
-                _weight_queues[cache_key].append(fields.get('weight', 0.0))
+                # 将 feeding_analysis_service 的显示下料速度注入到 fields 中
+                # 供 WS 推送和 API 使用, 保持前端数据结构兼容
+                if "no_hopper" not in device_id:
+                    fields["feed_rate"] = feeding_analysis_service.get_display_feed_rate(device_id)
             elif module_type == 'ElectricityMeter':
-                # 🔧 电表模块：实时缓存包含三相电流（用于API返回）
+                # [FIX] 电表模块：实时缓存包含三相电流（用于API返回）
                 is_roller_kiln = device_type == 'roller_kiln'
-                is_scr = device_type == 'scr'  # 🔧 检测是否为SCR设备（氨水泵）
+                is_scr = device_type == 'scr'  # [FIX] 检测是否为SCR设备（氨水泵）
                 fields = converter.convert(raw_fields, is_roller_kiln=is_roller_kiln, is_scr=is_scr)
             else:
                 fields = converter.convert(raw_fields)
@@ -665,7 +698,7 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
         }
     
     # 更新内存缓存
-    with _data_lock:  # 🔧 线程安全写入
+    with _data_lock:  # [FIX] 线程安全写入
         _latest_data[device_id] = {
             "device_id": device_id,
             "device_type": device_type,
@@ -673,6 +706,9 @@ def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: 
             "timestamp": timestamp.isoformat(),
             "modules": modules_data
         }
+
+    # 报警检查 (在锁外执行，避免 I/O 阻塞)
+    check_device_alarm(device_id, device_type, modules_data, timestamp)
 
 
 def _update_status_cache(status_data: bytes, status_parser):
@@ -718,7 +754,7 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
     Returns:
         添加的数据点数量
     """
-    global _weight_queues
+    global _point_buffer
     
     device_id = device_data['device_id']
     device_type = device_data['device_type']
@@ -733,49 +769,13 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
         if module_type in CONVERTER_MAP:
             converter = get_converter(module_type)
             
-            # 称重模块需要传入历史数据
             if module_type == 'WeighSensor':
-                previous_weight = None
-                poll_interval = 5.0 # 默认
-                
-                # 优化：过滤 no_hopper
-                should_query_db = "no_hopper" not in device_id
-                
-                try:
-                    if should_query_db:
-                        from app.services.history_query_service import HistoryQueryService
-                        target_time = datetime.now(timezone.utc) - timedelta(minutes=30)
-                        hqs = HistoryQueryService()
-                        
-                        hist_weight = hqs.query_weight_at_timestamp(device_id, target_time)
-                        
-                        if hist_weight is not None:
-                            previous_weight = hist_weight
-                            poll_interval = 1800.0
-                except Exception:
-                    pass
-
-                # 降级备用策略
-                if previous_weight is None:
-                    cache_key = f"{device_id}:{module_tag}"
-                    q = _weight_queues[cache_key]
-                    if len(q) > 0:
-                        previous_weight = q[0]
-                        poll_interval = len(q) * settings.plc_poll_interval
-
-                # 执行转换
-                fields = converter.convert(
-                    raw_fields,
-                    previous_weight=previous_weight,
-                    interval=poll_interval
-                )
-                
-                # 注意：此处不再次更新 _weight_queues，
-                # 避免在一个周期内重复追加数据（_update_latest_data 已负责更新）
+                # 称重模块: 只做重量转换 (feed_rate 不存 sensor_data)
+                fields = converter.convert(raw_fields)
             elif module_type == 'ElectricityMeter':
-                # 🔧 电表模块：写入数据库时不存储三相电流
+                # [FIX] 电表模块：写入数据库时不存储三相电流
                 is_roller_kiln = device_type == 'roller_kiln'
-                is_scr = device_type == 'scr'  # 🔧 检测是否为SCR设备
+                is_scr = device_type == 'scr'  # [FIX] 检测是否为SCR设备
                 fields = converter.convert_for_storage(raw_fields, is_roller_kiln=is_roller_kiln, is_scr=is_scr)
             else:
                 fields = converter.convert(raw_fields)
@@ -815,50 +815,55 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
 # ------------------------------------------------------------
 async def start_polling():
     """启动数据轮询任务（从配置文件动态加载）"""
-    global _polling_task, _retry_task, _is_running, _batch_size, _write_queue, _write_task
+    global _polling_task, _realtime_polling_task, _status_polling_task, _retry_task, _is_running, _batch_size, _write_queue, _write_task, _mock_data_lock, _latest_mock_db_data
     
     if _is_running:
-        print("⚠️ 轮询服务已在运行")
+        print("[WARN] 轮询服务已在运行")
         return
     
     # 加载DB映射配置
     _load_db_mappings()
     
     # 动态初始化解析器
-    print("📦 初始化解析器:")
+    print("[POLL][INIT] 初始化解析器")
     _init_parsers()
     
     # 加载批量写入配置
-    _batch_size = getattr(settings, 'batch_write_size', 30)
+    configured_batch_size = int(getattr(settings, 'batch_write_size', 10))
+    _batch_size = max(1, min(100, configured_batch_size))
     
     _is_running = True
+    _mock_data_lock = asyncio.Lock()
+    _latest_mock_db_data = None
     
-    # 🔧 [NEW] 初始化异步写入队列（最多缓存 10 批数据）
+    # [FIX] [NEW] 初始化异步写入队列（最多缓存 10 批数据）
     _write_queue = asyncio.Queue(maxsize=10)
     
     # 根据模式启动
     if settings.mock_mode:
-        print("🎭 Mock模式 - 跳过PLC连接")
+        print("[模拟] Mock模式 - 跳过PLC连接")
     else:
         # 启动 PLC 长连接
         plc = get_plc_manager()
         success, err = plc.connect()
         if success:
-            print(f"✅ PLC 长连接已建立")
+            print(f"[INFO] PLC 长连接已建立")
         else:
-            print(f"⚠️ PLC 连接失败: {err}，将在轮询时重试")
+            print(f"[WARN] PLC 连接失败: {err}，将在轮询时重试")
     
-    # 🔧 [NEW] 启动后台写入任务（关键：不阻塞 API）
+    # [FIX] [NEW] 启动后台写入任务（关键：不阻塞 API）
     _write_task = asyncio.create_task(_background_writer())
     
-    # 启动轮询任务
-    _polling_task = asyncio.create_task(_poll_data())
+    # 启动轮询任务（双任务：实时数据 + 状态位）
+    _realtime_polling_task = asyncio.create_task(_poll_realtime_data_loop())
+    _status_polling_task = asyncio.create_task(_poll_device_status_loop())
+    _polling_task = _realtime_polling_task
     _retry_task = asyncio.create_task(_retry_cached_data())
-    _cleanup_task = asyncio.create_task(_periodic_cleanup())  # 🔧 启动定期清理任务
+    _cleanup_task = asyncio.create_task(_periodic_cleanup())  # [FIX] 启动定期清理任务
     
     mode_str = "Mock模式" if settings.mock_mode else "正常模式"
-    print(f"✅ 轮询服务已启动 ({mode_str}, 间隔: {settings.plc_poll_interval}s, 批量: {_batch_size}次)")
-    print(f"🚀 后台写入模式已启用 - API 请求不会被阻塞")
+    print(f"[INFO] 轮询服务已启动 ({mode_str}, 实时间隔: {settings.realtime_poll_interval}s, 状态间隔: {settings.status_poll_interval}s, 批量: {_batch_size}次)")
+    print(f"[START] 后台写入模式已启用 - API 请求不会被阻塞")
 
 
 # ------------------------------------------------------------
@@ -866,51 +871,54 @@ async def start_polling():
 # ------------------------------------------------------------
 async def stop_polling():
     """停止数据轮询任务"""
-    global _polling_task, _retry_task, _cleanup_task, _write_task, _is_running, _write_queue
+    global _polling_task, _realtime_polling_task, _status_polling_task, _retry_task, _cleanup_task, _write_task, _is_running, _write_queue
     
     _is_running = False
     
     # 刷新缓冲区（将剩余数据放入队列）
-    print("⏳ 正在刷新缓冲区...")
+    print("[WAIT] 正在刷新缓冲区...")
     _flush_buffer()
     
-    # 🔧 [NEW] 等待写入队列处理完成（最多等待 10 秒）
+    # [FIX] [NEW] 等待写入队列处理完成（最多等待 10 秒）
     if _write_queue is not None:
         try:
             await asyncio.wait_for(_write_queue.join(), timeout=10.0)
-            print("✅ 写入队列已清空")
+            print("[INFO] 写入队列已清空")
         except asyncio.TimeoutError:
-            print("⚠️ 写入队列清空超时，部分数据可能丢失")
+            print("[WARN] 写入队列清空超时，部分数据可能丢失")
     
-    # 🔧 取消所有任务，添加超时保护
+    # [FIX] 取消所有任务，添加超时保护
     tasks_to_cancel = [
-        ("polling", _polling_task), 
+        ("realtime_polling", _realtime_polling_task),
+        ("status_polling", _status_polling_task),
         ("retry", _retry_task), 
         ("cleanup", _cleanup_task),
-        ("writer", _write_task)  # 🔧 [NEW] 后台写入任务
+        ("writer", _write_task)  # [FIX] [NEW] 后台写入任务
     ]
     
     for task_name, task in tasks_to_cancel:
         if task:
             task.cancel()
             try:
-                await asyncio.wait_for(task, timeout=5.0)  # 🔧 最多等待5秒
+                await asyncio.wait_for(task, timeout=5.0)  # [FIX] 最多等待5秒
             except asyncio.CancelledError:
                 pass
             except asyncio.TimeoutError:
-                print(f"⚠️ {task_name} 任务取消超时，强制终止")
+                print(f"[WARN] {task_name} 任务取消超时，强制终止")
     
     _polling_task = None
+    _realtime_polling_task = None
+    _status_polling_task = None
     _retry_task = None
     _cleanup_task = None
-    _write_task = None  # 🔧 [NEW] 重置写入任务句柄
-    _write_queue = None  # 🔧 [NEW] 重置写入队列
+    _write_task = None  # [FIX] [NEW] 重置写入任务句柄
+    _write_queue = None  # [FIX] [NEW] 重置写入队列
     
     # 断开 PLC 长连接
     plc = get_plc_manager()
     plc.disconnect()
     
-    print("⏹️ 轮询服务已停止")
+    print("[POLL][STOP] 轮询服务已停止")
 
 
 # ============================================================
@@ -922,7 +930,7 @@ def get_latest_data() -> Dict[str, Any]:
     Returns:
         {device_id: {device_id, device_type, timestamp, modules: {...}}}
     """
-    with _data_lock:  # 🔧 线程安全读取
+    with _data_lock:  # [FIX] 线程安全读取
         return _latest_data.copy()
 
 
@@ -935,7 +943,7 @@ def get_latest_device_data(device_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         设备数据或 None
     """
-    with _data_lock:  # 🔧 线程安全读取
+    with _data_lock:  # [FIX] 线程安全读取
         return _latest_data.get(device_id)
 
 
@@ -948,7 +956,7 @@ def get_latest_devices_by_type(device_type: str) -> List[Dict[str, Any]]:
     Returns:
         设备数据列表
     """
-    with _data_lock:  # 🔧 线程安全读取
+    with _data_lock:  # [FIX] 线程安全读取
         return [
             data for data in _latest_data.values()
             if data.get('device_type') == device_type
@@ -993,3 +1001,4 @@ def get_polling_stats() -> Dict[str, Any]:
         "cache_stats": cache_stats,
         "plc_status": plc_status
     }
+

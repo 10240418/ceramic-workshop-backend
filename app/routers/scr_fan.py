@@ -16,6 +16,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
+from app.core.unified_naming import parse_history_fields
 from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
     get_latest_data,
@@ -26,7 +27,7 @@ from app.services.polling_service import (
 
 router = APIRouter(tags=["SCR设备和风机"])
 
-# 🔧 删除模块级实例化，改为在函数内调用 get_history_service()
+# [FIX] 删除模块级实例化，改为在函数内调用 get_history_service()
 
 # 静态设备列表
 SCR_DEVICES = ["scr_1", "scr_2"]
@@ -201,8 +202,8 @@ async def get_scr_history(
         if not end:
             end = datetime.now()
         
-        # 解析字段列表
-        field_list = fields.split(",") if fields else None
+        # 解析并校验字段列表（仅保留统一数据库字段）
+        field_list = parse_history_fields(fields, module_type)
         
         data = get_history_service().query_device_history(
             device_id=device_id,
@@ -322,8 +323,8 @@ async def get_fan_history(
         if not end:
             end = datetime.now()
         
-        # 解析字段列表
-        field_list = fields.split(",") if fields else None
+        # 解析并校验字段列表（仅保留统一数据库字段）
+        field_list = parse_history_fields(fields, "ElectricityMeter")
         
         data = get_history_service().query_device_history(
             device_id=device_id,

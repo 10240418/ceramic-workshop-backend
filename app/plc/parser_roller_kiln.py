@@ -68,7 +68,7 @@ class RollerKilnParser:
             self.db_config = config.get('db_config', {})
             self.device_config = config.get('roller_kiln', {})
         
-        print(f"✅ DB9解析器初始化完成: 设备={self.device_config['device_name']}, "
+        print(f"[OK] DB9解析器初始化完成: 设备={self.device_config['device_name']}, "
               f"DB{self.db_config['db_number']}, 总大小{self.db_config['total_size']}字节, "
               f"6个分区电表")
     
@@ -132,7 +132,7 @@ class RollerKilnParser:
                 }
             
             except Exception as e:
-                print(f"⚠️  解析字段失败 {module_type}.{field_name} @ offset {offset + field_offset}: {e}")
+                print(f"[WARN]  解析字段失败 {module_type}.{field_name} @ offset {offset + field_offset}: {e}")
                 parsed_fields[field_name] = {
                     'value': 0.0,
                     'display_name': field.get('display_name', field_name),
@@ -183,7 +183,7 @@ class RollerKilnParser:
                 device_result['modules'][tag] = parsed
         
         except Exception as e:
-            print(f"⚠️  解析辊道窑数据失败: {e}")
+            print(f"[WARN]  解析辊道窑数据失败: {e}")
         
         # 返回列表格式，与DB8/DB10统一
         return [device_result]

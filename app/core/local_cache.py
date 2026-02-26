@@ -96,7 +96,7 @@ class LocalCache:
         cursor = self._conn.execute("SELECT COUNT(*) FROM pending_points")
         count = cursor.fetchone()[0]
         if count > 0:
-            print(f"⚠️ 本地缓存有 {count} 条待写入数据")
+            print(f"[WARN] 本地缓存有 {count} 条待写入数据")
     
     def save_points(self, points: List[CachedPoint]) -> int:
         """保存数据点到本地缓存
@@ -125,7 +125,7 @@ class LocalCache:
                 self._conn.commit()
                 return len(points)
             except Exception as e:
-                print(f"❌ 本地缓存保存失败: {e}")
+                print(f"[ERROR] 本地缓存保存失败: {e}")
                 return 0
     
     def get_pending_points(self, limit: int = 100, max_retry: int = 5) -> List[tuple]:
@@ -155,7 +155,7 @@ class LocalCache:
                         pass  # 跳过解析失败的记录
                 return results
             except Exception as e:
-                print(f"❌ 读取本地缓存失败: {e}")
+                print(f"[ERROR] 读取本地缓存失败: {e}")
                 return []
     
     def mark_success(self, ids: List[int]) -> None:
@@ -168,7 +168,7 @@ class LocalCache:
                 self._conn.execute(f"DELETE FROM pending_points WHERE id IN ({placeholders})", ids)
                 self._conn.commit()
             except Exception as e:
-                print(f"❌ 删除缓存记录失败: {e}")
+                print(f"[ERROR] 删除缓存记录失败: {e}")
     
     def mark_retry(self, ids: List[int]) -> None:
         """标记数据点需要重试（增加重试计数）"""
@@ -184,7 +184,7 @@ class LocalCache:
                 )
                 self._conn.commit()
             except Exception as e:
-                print(f"❌ 更新重试计数失败: {e}")
+                print(f"[ERROR] 更新重试计数失败: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
         """获取缓存统计信息"""
@@ -218,9 +218,9 @@ class LocalCache:
                 deleted = cursor.rowcount
                 self._conn.commit()
                 if deleted > 0:
-                    print(f"🧹 清理了 {deleted} 条过期缓存记录")
+                    print(f" 清理了 {deleted} 条过期缓存记录")
             except Exception as e:
-                print(f"❌ 清理缓存失败: {e}")
+                print(f"[ERROR] 清理缓存失败: {e}")
     
     def close(self) -> None:
         """关闭数据库连接
