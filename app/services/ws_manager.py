@@ -60,8 +60,8 @@ class ConnectionManager:
         self.last_heartbeat[websocket] = datetime.now(timezone.utc)
         client_host = websocket.client.host if websocket.client else "unknown"
         logger.info(
-            f"[TEST][前端→WS] 新连接建立 | 来自={client_host} | "
-            f"当前连接数={len(self.active_connections)}"
+            f"[WS] 新连接 ({client_host})，"
+            f"当前连接数: {len(self.active_connections)}"
         )
 
     # ------------------------------------------------------------
@@ -89,7 +89,7 @@ class ConnectionManager:
         if websocket in self.active_connections:
             self.active_connections[websocket].add(channel)
             subs = self.get_channel_subscribers(channel)
-            logger.info(f"[TEST][前端→WS] 订阅频道 [{channel}] | 该频道订阅数={subs}")
+            logger.info(f"[WS] 订阅频道 [{channel}]，订阅数: {subs}")
             return True
         return False
 
@@ -201,14 +201,13 @@ class ConnectionManager:
 
         while self._is_running:
             try:
-                # [TEST] 等待轮询服务通知
                 await asyncio.wait_for(event.wait(), timeout=_EVENT_WAIT_TIMEOUT)
                 event.clear()
-                logger.info(f"[TEST][WS] 收到轮询服务通知，准备推送实时数据")
+                subs = self.get_channel_subscribers("realtime")
 
                 timestamp = datetime.now(timezone.utc).isoformat()
 
-                if self.get_channel_subscribers("realtime") > 0:
+                if subs > 0:
                     await self._push_realtime_data(timestamp)
 
             except asyncio.TimeoutError:
@@ -226,10 +225,11 @@ class ConnectionManager:
             try:
                 await asyncio.wait_for(event.wait(), timeout=_EVENT_WAIT_TIMEOUT)
                 event.clear()
+                subs = self.get_channel_subscribers("device_status")
 
                 timestamp = datetime.now(timezone.utc).isoformat()
 
-                if self.get_channel_subscribers("device_status") > 0:
+                if subs > 0:
                     await self._push_device_status(timestamp)
 
             except asyncio.TimeoutError:
@@ -248,19 +248,6 @@ class ConnectionManager:
             return
 
         source = "mock" if settings.mock_mode else "plc"
-        
-        # [TEST] 统计数据点数量
-        hopper_count = sum(1 for k in latest.keys() if 'hopper' in k)
-        roller_count = sum(1 for k in latest.keys() if 'roller_kiln' in k)
-        scr_count = sum(1 for k in latest.keys() if 'scr' in k)
-        fan_count = sum(1 for k in latest.keys() if 'fan' in k)
-        
-        logger.info(
-            f"[TEST][WS→前端] 准备推送 | "
-            f"料仓={hopper_count} | 辊道窑={roller_count} | SCR={scr_count} | 风机={fan_count} | "
-            f"总设备={len(latest)} | 订阅者={self.get_channel_subscribers('realtime')}"
-        )
-        
         message = {
             "type": "realtime_data",
             "success": True,
@@ -269,8 +256,6 @@ class ConnectionManager:
             "data": latest,
         }
         await self.broadcast("realtime", message)
-        
-        logger.info(f"[TEST][WS→前端] 推送完成 | timestamp={timestamp}")
 
         self._push_count += 1
         if self._push_count % self._push_log_interval == 0:
@@ -297,7 +282,8 @@ class ConnectionManager:
             all_statuses = [s for db_list in parsed_data.values() for s in db_list]
             total = len(all_statuses)
             normal = sum(1 for s in all_statuses if s.get("is_normal", False))
-            summary = {"total": total, "normal": normal, "error": total - normal}
+            error_count = total - normal
+            summary = {"total": total, "normal": normal, "error": error_count}
         except Exception as e:
             logger.error(f"[WS] 设备状态解析失败: {e}", exc_info=True)
             return

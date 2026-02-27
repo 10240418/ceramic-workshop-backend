@@ -10,9 +10,12 @@
 from fastapi import APIRouter, Query
 from datetime import datetime
 from typing import Optional
+import logging
 
 from app.models.response import ApiResponse
 from app.alarm_thresholds import AlarmThresholdManager
+
+logger = logging.getLogger(__name__)
 from app.core.alarm_store import query_alarms, get_alarm_count
 
 router = APIRouter(prefix="/api/alarm", tags=["报警"])
@@ -28,6 +31,7 @@ async def get_thresholds():
         manager = AlarmThresholdManager.get_instance()
         return ApiResponse.ok(manager.get_all())
     except Exception as e:
+        logger.error("[Alarm] get thresholds failed: %s", e, exc_info=True)
         return ApiResponse.fail(str(e))
 
 
@@ -50,6 +54,7 @@ async def update_thresholds(body: dict):
             return ApiResponse.ok({"updated": len(body), "message": "阈值配置已保存"})
         return ApiResponse.fail("保存阈值配置失败")
     except Exception as e:
+        logger.error("[Alarm] update thresholds failed: %s", e, exc_info=True)
         return ApiResponse.fail(str(e))
 
 
@@ -82,6 +87,7 @@ async def get_alarm_records(
         )
         return ApiResponse.ok({"records": records, "count": len(records)})
     except Exception as e:
+        logger.error("[Alarm] query alarm records failed: %s", e, exc_info=True)
         return ApiResponse.fail(str(e))
 
 
@@ -97,4 +103,5 @@ async def get_count(
         counts = get_alarm_count(hours=hours)
         return ApiResponse.ok(counts)
     except Exception as e:
+        logger.error("[Alarm] get alarm count failed: %s", e, exc_info=True)
         return ApiResponse.fail(str(e))

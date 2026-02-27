@@ -16,25 +16,35 @@ from typing import Optional
 def _build_env_candidates() -> tuple[str, ...]:
     """构建 .env 候选路径（按优先级）
 
-    优先级：
-    1. 可执行文件所在目录（PyInstaller 打包后）
-    2. 项目根目录（config.py 同级）
-    3. 当前工作目录
-    4. 启动脚本所在目录
+    PyInstaller 打包后优先级：
+    1. 可执行文件所在目录 (exe 同目录，部署人员可修改)
+    2. 当前工作目录
+
+    开发模式优先级：
+    1. 项目根目录 (config.py 同级)
+    2. 当前工作目录
+    3. 启动脚本所在目录
+
+    [注意] PyInstaller 模式下排除 _MEIPASS 内部路径，防止打包残留的
+    旧 .env 覆盖外部配置
     """
-    project_dir = Path(__file__).resolve().parent
     candidates = []
+    is_frozen = getattr(sys, "frozen", False)
 
-    if getattr(sys, "frozen", False) and getattr(sys, "executable", None):
+    if is_frozen and getattr(sys, "executable", None):
+        # PyInstaller 模式: 只信任 exe 所在目录和 cwd
         candidates.append(Path(sys.executable).resolve().parent / ".env")
-
-    candidates.append(project_dir / ".env")
-    candidates.append(Path.cwd() / ".env")
-
-    try:
-        candidates.append(Path(sys.argv[0]).resolve().parent / ".env")
-    except Exception:
-        pass
+        cwd_env = Path.cwd() / ".env"
+        candidates.append(cwd_env)
+    else:
+        # 开发模式: 项目目录 > cwd > argv 目录
+        project_dir = Path(__file__).resolve().parent
+        candidates.append(project_dir / ".env")
+        candidates.append(Path.cwd() / ".env")
+        try:
+            candidates.append(Path(sys.argv[0]).resolve().parent / ".env")
+        except Exception:
+            pass
 
     unique = []
     seen = set()
@@ -114,9 +124,6 @@ class Settings(BaseSettings):
     # feeding_calc_interval: 每隔多少次轮询触发一次速度/累计量计算
     feeding_window_size: int = 36
     feeding_calc_interval: int = 12
-    
-    # 本地缓存配置
-    local_cache_path: str = "data/cache.db"  # SQLite 缓存文件路径
 
     # 日志配置
     log_dir: str = "logs"
@@ -175,7 +182,7 @@ class Settings(BaseSettings):
             raise ValueError("feeding_calc_interval 必须在 1 ~ 3600 之间")
         return value
 
-    @field_validator("local_cache_path", "log_dir", "config_dir", mode="before")
+    @field_validator("log_dir", "config_dir", mode="before")
     @classmethod
     def _resolve_runtime_relative_path(cls, value: str) -> str:
         if value in ("", None):

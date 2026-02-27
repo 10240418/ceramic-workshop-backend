@@ -13,6 +13,9 @@
 #   对应前端: 窑7,6,5,4,2,1,8,3,9
 # - 辊道窑（7个）: zone1~6（6个分区）+ roller_kiln_total（合计）
 #   对应前端: 辊道窑分区1-6 + 辊道窑合计
+import logging
+
+logger = logging.getLogger(__name__)
 # - SCR燃气表（2个）: scr_1, scr_2
 #   对应前端: SCR北_燃气表, SCR南_燃气表
 # - SCR氨水泵（2个）: scr_1_pump, scr_2_pump
@@ -135,6 +138,7 @@ async def export_all_runtime(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[Export] export runtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -240,6 +244,7 @@ async def export_gas_consumption(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[Export] export gas consumption failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -335,6 +340,7 @@ async def export_feeding_amount(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[Export] export feeding amount failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -445,6 +451,7 @@ async def export_all_electricity_consumption(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[Export] export electricity failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -594,4 +601,5 @@ async def export_comprehensive_data(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[Export] export comprehensive failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")

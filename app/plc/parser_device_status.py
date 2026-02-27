@@ -1,9 +1,12 @@
 # 设备状态位解析器 - 解析 DB3/DB7/DB11 状态位
 # ModuleStatus: Error(Bool, byte 0 bit 0) + Status(Word, bytes 2-3 大端序) = 4 bytes
 
+import logging
 import yaml
 from pathlib import Path
 from typing import Dict, List, Any, Optional
+
+logger = logging.getLogger(__name__)
 
 _parser_instance: Optional["DeviceStatusParser"] = None
 
@@ -18,7 +21,7 @@ class DeviceStatusParser:
                          ("configs/status_scr_fan_11.yaml", 11)]:
             if (p := Path(path)).exists():
                 self._configs[db] = yaml.safe_load(p.read_text(encoding='utf-8'))
-                print(f"   [OK] 加载状态配置: DB{db}")
+                logger.info("[StatusParser] 加载状态配置: DB%s", db)
     
     def parse_module_status(self, data: bytes, offset: int) -> Dict[str, Any]:
         """解析单个模块状态 (4字节)"""

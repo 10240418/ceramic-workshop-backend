@@ -1,10 +1,13 @@
 # 设备状态位API路由 (后端解析版)
 
+import logging
 from fastapi import APIRouter
 from typing import Dict, Any, List
 
 from app.services.polling_service import get_device_status_raw
 from app.plc.parser_device_status import get_device_status_parser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/status", tags=["设备状态位"])
 
@@ -32,6 +35,7 @@ async def get_all_device_status():
         return {"success": True, "data": parsed_data, 
                 "summary": _calc_summary(all_statuses), "error": None}
     except Exception as e:
+        logger.error("[Status] get all device status failed: %s", e, exc_info=True)
         return {"success": False, "data": None, "summary": None, "error": str(e)}
 
 
@@ -49,6 +53,7 @@ async def get_all_device_status_flat():
         return {"success": True, "data": all_statuses, 
                 "summary": _calc_summary(all_statuses), "error": None}
     except Exception as e:
+        logger.error("[Status] get flat device status failed: %s", e, exc_info=True)
         return {"success": False, "data": None, "summary": None, "error": str(e)}
 
 
@@ -71,4 +76,5 @@ async def get_single_db_status(db_number: int):
                 "db_info": {"db_number": db_info['db_number'], "db_name": db_info['db_name']},
                 "summary": _calc_summary(statuses), "error": None}
     except Exception as e:
+        logger.error("[Status] get DB status failed: %s", e, exc_info=True)
         return {"success": False, "data": None, "db_info": None, "summary": None, "error": str(e)}

@@ -10,10 +10,13 @@
 
 from fastapi import APIRouter
 from datetime import datetime
+import logging
 
 from config import get_settings
 from app.models.response import ApiResponse
 from app.services.polling_service import get_polling_stats, is_polling_running
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["health"])
 settings = get_settings()
@@ -68,6 +71,7 @@ async def plc_health(probe: bool = True):
             "message": "PLC连接正常" if status["connected"] else "PLC未连接或已断开"
         })
     except Exception as e:
+        logger.error("[Health] PLC health check failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"PLC连接检查失败: {str(e)}")
 
 
@@ -111,6 +115,7 @@ async def polling_health():
             **stats
         })
     except Exception as e:
+        logger.error("[Health] polling health check failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"轮询状态检查失败: {str(e)}")
 
 
@@ -237,4 +242,5 @@ async def get_latest_timestamp():
                 "message": "数据库中暂无数据"
             })
     except Exception as e:
+        logger.error("[Health] get latest timestamp failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"获取最新时间戳失败: {str(e)}")

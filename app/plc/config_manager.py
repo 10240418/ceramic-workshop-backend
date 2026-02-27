@@ -12,11 +12,14 @@
 # 7. reload_config()           - 热重载配置
 # ============================================================
 
+import logging
 import yaml
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class PLCDataType(str, Enum):
@@ -104,7 +107,7 @@ class PLCConfigManager:
         
         # 兼容空配置文件（使用新的模块化配置系统）
         if raw_config is None or not isinstance(raw_config, dict):
-            print("[WARN]  使用新的模块化配置系统 (plc_modules.yaml)")
+            logger.warning("[ConfigMgr] 使用新的模块化配置系统 (plc_modules.yaml)")
             return
         
         # 解析每个设备的配置
@@ -131,7 +134,7 @@ class PLCConfigManager:
                     )
                     data_points.append(data_point)
                 except Exception as e:
-                    print(f"[WARN]  解析数据点失败: {point_data.get('name', 'unknown')} - {e}")
+                    logger.warning("[ConfigMgr] 解析数据点失败: %s - %s", point_data.get('name', 'unknown'), e)
             
             # 创建设备配置
             self.config[device_key] = DeviceConfig(
@@ -279,7 +282,7 @@ class PLCConfigManager:
             是否成功
         """
         if device_type not in self.config:
-            print(f"[ERROR] 设备类型不存在: {device_type}")
+            logger.error("[ConfigMgr] 设备类型不存在: %s", device_type)
             return False
         
         try:
@@ -304,11 +307,11 @@ class PLCConfigManager:
             # 保存到文件
             self._save_config()
             
-            print(f"[OK] 数据点添加成功: {data_point.name}")
+            logger.info("[ConfigMgr] 数据点添加成功: %s", data_point.name)
             return True
             
         except Exception as e:
-            print(f"[ERROR] 添加数据点失败: {e}")
+            logger.error("[ConfigMgr] 添加数据点失败: %s", e, exc_info=True)
             return False
     
     # ------------------------------------------------------------
@@ -331,7 +334,7 @@ class PLCConfigManager:
             是否成功
         """
         if device_type not in self.config:
-            print(f"[ERROR] 设备类型不存在: {device_type}")
+            logger.error("[ConfigMgr] 设备类型不存在: %s", device_type)
             return False
         
         # 查找数据点
@@ -342,7 +345,7 @@ class PLCConfigManager:
                 break
         
         if not point:
-            print(f"[ERROR] 数据点不存在: {point_id}")
+            logger.error("[ConfigMgr] 数据点不存在: %s", point_id)
             return False
         
         # 更新字段
@@ -355,7 +358,7 @@ class PLCConfigManager:
         # 保存到文件
         self._save_config()
         
-        print(f"[OK] 数据点更新成功: {point.name}")
+        logger.info("[ConfigMgr] 数据点更新成功: %s", point.name)
         return True
     
     # ------------------------------------------------------------
@@ -363,10 +366,10 @@ class PLCConfigManager:
     # ------------------------------------------------------------
     def reload_config(self):
         """重新加载配置文件（热重载）"""
-        print("[...] 重新加载配置...")
+        logger.info("[ConfigMgr] 重新加载配置...")
         self.config.clear()
         self._load_config()
-        print("[OK] 配置重载完成")
+        logger.info("[ConfigMgr] 配置重载完成")
     
     def _save_config(self):
         """保存配置到文件"""

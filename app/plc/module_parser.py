@@ -9,11 +9,14 @@
 # 5. parse_device_data()     - 解析设备所有模块数据
 # ============================================================
 
+import logging
 import struct
 import yaml
 from typing import Dict, List, Any
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class ModuleParser:
@@ -40,7 +43,7 @@ class ModuleParser:
         for module in config.get('modules', []):
             self.modules[module['name']] = module
             
-        print(f"[OK] 加载了 {len(self.modules)} 个模块配置")
+        logger.info("[ModuleParser] 加载了 %s 个模块配置", len(self.modules))
     
     # ------------------------------------------------------------
     # 3. parse_field() - 解析单个字段 (支持递归 Struct)
@@ -106,7 +109,7 @@ class ModuleParser:
             return raw_value
             
         except Exception as e:
-            print(f"[WARN]  解析字段 {field.get('name')} 失败 (Offset: {current_offset}, Type: {data_type}): {e}")
+            logger.warning("[ModuleParser] 解析字段 %s 失败 (Offset: %s, Type: %s): %s", field.get('name'), current_offset, data_type, e)
             return 0.0
     
     # ------------------------------------------------------------
@@ -178,7 +181,7 @@ class ModuleParser:
                 module_data = self.parse_module(module_name, db_data)
                 device_data['modules'][module_name] = module_data
             except Exception as e:
-                print(f"[WARN]  解析模块 {module_name} 失败: {e}")
+                logger.warning("[ModuleParser] 解析模块 %s 失败: %s", module_name, e)
         
         return device_data
 

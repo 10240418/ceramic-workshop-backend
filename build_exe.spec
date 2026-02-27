@@ -46,7 +46,7 @@ a = Analysis(
     datas=[
         ('configs', 'configs'),
         ('data', 'data'),
-        ('.env', '.'),
+        # [禁止] 不打包 .env 到 exe 内部，.env 由部署人员在 exe 同目录下配置
         ('assets', 'assets'),  # 托盘图标
     ],
     hiddenimports=[

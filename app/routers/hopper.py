@@ -1,10 +1,13 @@
 # 料仓设备API路由
+import logging
 
 from fastapi import APIRouter, Query, Path
 from typing import Optional, List
 from datetime import datetime, timedelta
 
 from app.models.response import ApiResponse
+
+logger = logging.getLogger(__name__)
 from app.core.unified_naming import parse_history_fields
 from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
@@ -126,6 +129,7 @@ async def get_all_hoppers_realtime(
             "devices": devices_data
         })
     except Exception as e:
+        logger.error("[Hopper] batch query failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
@@ -172,6 +176,7 @@ async def get_hopper_realtime(
             **data
         })
     except Exception as e:
+        logger.error("[Hopper] query realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 # ============================================================
@@ -263,6 +268,7 @@ async def get_hopper_history(
             "data": data
         })
     except Exception as e:
+        logger.error("[Hopper] query history failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -314,6 +320,7 @@ async def get_hopper_feeding_cumulative(
             "data": data,
         })
     except Exception as e:
+        logger.error("[Hopper] query feeding cumulative failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询下料速度/投料总量失败: {str(e)}")
 
 
@@ -349,6 +356,7 @@ async def get_hopper_feeding_history(
         
         return ApiResponse.ok(data=records)
     except Exception as e:
+        logger.error("[Hopper] query feeding history failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询投料记录失败: {e}")
 
 
@@ -397,6 +405,7 @@ async def backfill_hopper_feeding_record(
         
         return ApiResponse.ok({"message": "Record backfilled successfully"})
     except Exception as e:
+        logger.error("[Hopper] backfill failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"Backfill fail: {str(e)}")
 
 
@@ -441,6 +450,7 @@ async def delete_hopper_feeding_record(
         
         return ApiResponse.ok({"message": f"Deleted record at {time}"})
     except Exception as e:
+        logger.error("[Hopper] delete feeding record failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"Delete fail: {str(e)}")
 
 
@@ -488,6 +498,7 @@ async def purge_hopper_feeding_records(
             "message": f"Purged all feeding_records for {device_id} between {start} and {end}"
         })
     except Exception as e:
+        logger.error("[Hopper] purge feeding records failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"Purge fail: {str(e)}")
 
 
@@ -522,6 +533,7 @@ async def get_feeding_analysis_status():
             "devices": feeding_analysis_service.get_all_feeding_data(),
         })
     except Exception as e:
+        logger.error("[Hopper] get feeding analysis status failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"获取状态失败: {str(e)}")
 
 

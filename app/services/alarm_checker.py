@@ -193,15 +193,15 @@ def _check_one(
 ) -> None:
     manager = AlarmThresholdManager.get_instance()
     level = manager.check_value(param_name, value)
-    # 只记录报警级别，警告级别不写入数据库
+    # 只记录报警级别，正常和警告均忽略
     if level != "alarm":
         return
 
     cfg = getattr(manager.thresholds, param_name, None)
-    threshold = cfg.alarm_max if level == "alarm" else cfg.warning_max
+    threshold = cfg.alarm_max
     message = (
         f"{param_name} = {value:.2f} {unit} "
-        f"{'超过报警阈值' if level == 'alarm' else '超过警告阈值'} "
+        f"超过报警阈值 "
         f"{threshold:.2f} {unit}"
     )
     log_alarm(

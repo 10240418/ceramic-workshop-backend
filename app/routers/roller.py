@@ -11,8 +11,11 @@
 from fastapi import APIRouter, Query, Path
 from typing import Optional
 from datetime import datetime, timedelta
+import logging
 
 from app.models.response import ApiResponse
+
+logger = logging.getLogger(__name__)
 from app.core.unified_naming import parse_history_fields
 from app.services.history_query_service import get_history_service
 from app.services.polling_service import (
@@ -100,6 +103,7 @@ async def get_roller_realtime():
             **data
         })
     except Exception as e:
+        logger.error("[Roller] query realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -214,6 +218,7 @@ async def get_roller_realtime_formatted():
         
         return ApiResponse.ok(formatted_data)
     except Exception as e:
+        logger.error("[Roller] query formatted realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -288,6 +293,7 @@ async def get_roller_history(
             "data": data
         })
     except Exception as e:
+        logger.error("[Roller] query history failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -337,4 +343,5 @@ async def get_zone_realtime(
             "electricity": zone_meter.get("fields", {})
         })
     except Exception as e:
+        logger.error("[Roller] query zone realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")

@@ -17,7 +17,10 @@ from typing import Dict, Any, Optional, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
+import logging
 import math
+
+logger = logging.getLogger(__name__)
 
 from config import get_settings
 from app.core.influxdb import get_influx_client
@@ -196,11 +199,11 @@ class DataExportService:
                     return record.get_value()
             
             # [FIX] 如果在时间窗口内没找到数据，直接返回 0
-            print(f"[WARN]  未找到 {device_id} 在时间窗口内的燃气读数，使用 0 作为默认值")
+            logger.warning("[Export] 未找到 %s 在时间窗口内的燃气读数, 使用 0 作为默认值", device_id)
             return 0.0
             
         except Exception as e:
-            print(f"[WARN]  查询 {device_id} 燃气读数失败: {str(e)}")
+            logger.warning("[Export] 查询 %s 燃气读数失败: %s", device_id, e, exc_info=True)
             return 0.0
     
     # ------------------------------------------------------------
@@ -276,7 +279,7 @@ class DataExportService:
                             break
                 
                 except Exception as e:
-                    print(f"[WARN]  查询 {device_id} 在 {current_date.date()} 的投料记录失败: {str(e)}")
+                    logger.warning("[Export] 查询 %s 在 %s 的投料记录失败: %s", device_id, current_date.date(), e, exc_info=True)
                 
                 daily_records.append({
                     "date": current_date.strftime("%Y-%m-%d"),
@@ -425,15 +428,15 @@ class DataExportService:
                 for record in table.records:
                     # ImpEp 已经是 kWh 单位，直接返回
                     value = record.get_value()
-                    print(f" 查询电表读数: device_id={device_id}, module_tag={module_tag}, value={value}")
+                    logger.debug("[Export] 查询电表读数: device_id=%s, module_tag=%s, value=%s", device_id, module_tag, value)
                     return value
             
             # [FIX] 如果在时间窗口内没找到数据，直接返回 0
-            print(f"[WARN]  未找到 {device_id} (module_tag={module_tag}) 在时间窗口内的电表读数，使用 0 作为默认值")
+            logger.warning("[Export] 未找到 %s (module_tag=%s) 在时间窗口内的电表读数, 使用 0 作为默认值", device_id, module_tag)
             return 0.0
             
         except Exception as e:
-            print(f"[WARN]  查询 {device_id} 电表读数失败: {str(e)}")
+            logger.warning("[Export] 查询 %s 电表读数失败: %s", device_id, e, exc_info=True)
             return 0.0
     
     def _calculate_roller_zone_electricity_by_day(
@@ -560,11 +563,11 @@ class DataExportService:
             runtime_seconds = running_points * polling_interval_seconds
             runtime_hours = round(runtime_seconds / 3600, 2)
             
-            print(f" 计算运行时长: device_id={device_id}, module_tag={module_tag}, points={running_points}, hours={runtime_hours}")
+            logger.debug("[Export] 计算运行时长: device_id=%s, module_tag=%s, points=%s, hours=%s", device_id, module_tag, running_points, runtime_hours)
             
             return runtime_hours
         except Exception as e:
-            print(f"[WARN]  计算 {device_id} 运行时长失败: {str(e)}")
+            logger.warning("[Export] 计算 %s 运行时长失败: %s", device_id, e, exc_info=True)
             return 0.0
     
     def _calculate_gas_meter_runtime(
@@ -609,11 +612,11 @@ class DataExportService:
             runtime_seconds = running_points * polling_interval_seconds
             runtime_hours = round(runtime_seconds / 3600, 2)
             
-            print(f" 计算燃气表运行时长: device_id={device_id}, points={running_points}, hours={runtime_hours}")
+            logger.debug("[Export] 计算燃气表运行时长: device_id=%s, points=%s, hours=%s", device_id, running_points, runtime_hours)
             
             return runtime_hours
         except Exception as e:
-            print(f"[WARN]  计算 {device_id} 燃气表运行时长失败: {str(e)}")
+            logger.warning("[Export] 计算 %s 燃气表运行时长失败: %s", device_id, e, exc_info=True)
             return 0.0
     
     def _calculate_scr_pump_electricity_by_day(
@@ -1103,7 +1106,7 @@ class DataExportService:
                 ]
             }
         """
-        print(f"[...] 开始综合导出数据: {start_time} ~ {end_time}")
+        logger.info("[Export] 开始综合导出数据: %s ~ %s", start_time, end_time)
         
         # 1. 获取所有设备的电量和运行时长数据
         electricity_data = self.calculate_all_devices_electricity_by_day(start_time, end_time)
@@ -1320,7 +1323,7 @@ class DataExportService:
                 "daily_records": daily_records
             })
         
-        print(f"[OK] 综合导出完成: {len(devices)} 个设备")
+        logger.info("[Export] 综合导出完成: %s 个设备", len(devices))
         
         return {
             "start_time": self._format_timestamp(start_time),
@@ -1367,7 +1370,7 @@ class DataExportService:
                 ...
             }
         """
-        print(f"[...] 批量查询预计算数据: {start_date.date()} ~ {end_date.date()}")
+        logger.info("[Export] 批量查询预计算数据: %s ~ %s", start_date.date(), end_date.date())
         
         # [FIX] 一次性查询所有设备、所有指标类型的数据
         query = f'''
@@ -1408,11 +1411,11 @@ class DataExportService:
                         "gas_consumption": record.values.get("gas_consumption", 0.0),
                     })
             
-            print(f"[OK] 批量查询完成: {len(data_by_device)} 个设备")
+            logger.info("[Export] 批量查询完成: %s 个设备", len(data_by_device))
             return data_by_device
         
         except Exception as e:
-            print(f"[ERROR] 批量查询失败: {str(e)}")
+            logger.error("[Export] 批量查询失败: %s", e, exc_info=True)
             return {}
     
     # ------------------------------------------------------------
@@ -1441,7 +1444,7 @@ class DataExportService:
         if not partial_day_slices:
             return {}
         
-        print(f"[...] 并行计算不完整天: {len(device_configs)} 个设备 × {len(partial_day_slices)} 个时间段")
+        logger.info("[Export] 并行计算不完整天: %s 个设备 x %s 个时间段", len(device_configs), len(partial_day_slices))
         
         data_by_device: Dict[str, Dict[str, List[Dict[str, Any]]]] = {}
         
@@ -1479,9 +1482,9 @@ class DataExportService:
                     data_by_device[device_id][metric_type].append(record)
                 
                 except Exception as e:
-                    print(f"[WARN]  计算失败 {device_id}/{metric_type}: {str(e)}")
+                    logger.warning("[Export] 计算失败 %s/%s: %s", device_id, metric_type, e, exc_info=True)
         
-        print(f"[OK] 并行计算完成: {len(data_by_device)} 个设备")
+        logger.info("[Export] 并行计算完成: %s 个设备", len(data_by_device))
         return data_by_device
     
     def _calculate_realtime_single(
@@ -1583,7 +1586,7 @@ class DataExportService:
                         feeding_amount = record.get_value()
                         break
             except Exception as e:
-                print(f"[WARN]  查询投料量失败: {str(e)}")
+                logger.warning("[Export] 查询投料量失败: %s", e, exc_info=True)
             
             return {
                 "date": slice_obj.date,
@@ -1691,7 +1694,7 @@ class DataExportService:
                     return record.get_value()
             return None
         except Exception as e:
-            print(f"[WARN]  查询电量读数失败 {device_id}/{module_tag_filter}: {str(e)}")
+            logger.warning("[Export] 查询电量读数失败 %s/%s: %s", device_id, module_tag_filter, e, exc_info=True)
             return None
     
     # ------------------------------------------------------------
@@ -1744,7 +1747,7 @@ class DataExportService:
             return round(runtime_hours, 2)
         
         except Exception as e:
-            print(f"[WARN]  计算运行时长失败 {device_id}/{module_tag_filter}: {str(e)}")
+            logger.warning("[Export] 计算运行时长失败 %s/%s: %s", device_id, module_tag_filter, e, exc_info=True)
             return 0.0
     
     # ------------------------------------------------------------
@@ -1786,14 +1789,14 @@ class DataExportService:
         
         性能提升: 10-20 倍
         """
-        print(f" 开始综合导出（V3终极优化版）: {start_time} ~ {end_time}")
+        logger.info("[Export] 开始综合导出(V3): %s ~ %s", start_time, end_time)
         
         # 1. 按自然日切分时间段
         slices = split_time_range_by_natural_days(start_time, end_time)
         full_day_slices = [s for s in slices if s.is_full_day]
         partial_day_slices = [s for s in slices if not s.is_full_day]
         
-        print(f" 时间切分: {len(full_day_slices)} 个完整天, {len(partial_day_slices)} 个不完整天")
+        logger.info("[Export] 时间切分: %s 个完整天, %s 个不完整天", len(full_day_slices), len(partial_day_slices))
         
         # 2. 检查缓存（仅完整天）
         cache_key = None
@@ -1804,7 +1807,7 @@ class DataExportService:
             cached_data = self._get_from_cache(cache_key)
             
             if cached_data:
-                print(f"[OK] 命中缓存，直接返回")
+                logger.info("[Export] 命中缓存, 直接返回")
                 return cached_data
         
         # 3. 批量查询完整天的预计算数据
@@ -1836,7 +1839,7 @@ class DataExportService:
         if cache_key:
             self._set_to_cache(cache_key, result)
         
-        print(f"[OK] 综合导出完成（V3）: {result['total_devices']} 个设备")
+        logger.info("[Export] 综合导出完成(V3): %s 个设备", result['total_devices'])
         return result
     
     def _get_all_device_configs(self) -> List[Dict[str, str]]:
@@ -1944,7 +1947,7 @@ class DataExportService:
             all_dates.append(current_date.strftime("%Y-%m-%d"))
             current_date += timedelta(days=1)
         
-        print(f" 生成完整日期范围: {len(all_dates)} 天 ({all_dates[0]} ~ {all_dates[-1]})")
+        logger.debug("[Export] 生成完整日期范围: %s 天 (%s ~ %s)", len(all_dates), all_dates[0], all_dates[-1])
         
         # 获取所有设备配置
         device_configs = self._get_all_device_configs()
@@ -2022,7 +2025,7 @@ class DataExportService:
         
         复用 export_comprehensive_v3 的数据，只提取运行时长字段
         """
-        print(f" 开始设备运行时长（V3）: {start_time} ~ {end_time}")
+        logger.info("[Export] 开始设备运行时长(V3): %s ~ %s", start_time, end_time)
         
         # 复用综合导出的数据
         comprehensive_data = self.export_comprehensive_v3(start_time, end_time)
@@ -2070,7 +2073,7 @@ class DataExportService:
             elif device_type == "fan":
                 result["fan_devices"].append(device_data)
         
-        print(f"[OK] 设备运行时长完成（V3）")
+        logger.info("[Export] 设备运行时长完成(V3)")
         return result
     
     # ------------------------------------------------------------
@@ -2086,7 +2089,7 @@ class DataExportService:
         
         复用 export_comprehensive_v3 的数据，只提取燃气消耗字段
         """
-        print(f" 开始燃气消耗统计（V3）: {start_time} ~ {end_time}")
+        logger.info("[Export] 开始燃气消耗统计(V3): %s ~ %s", start_time, end_time)
         
         # 复用综合导出的数据
         comprehensive_data = self.export_comprehensive_v3(start_time, end_time)
@@ -2117,7 +2120,7 @@ class DataExportService:
                 "daily_records": daily_records
             }
         
-        print(f"[OK] 燃气消耗统计完成（V3）: {len(result)} 个设备")
+        logger.info("[Export] 燃气消耗统计完成(V3): %s 个设备", len(result))
         return result
     
     # ------------------------------------------------------------
@@ -2132,7 +2135,7 @@ class DataExportService:
         
         复用 export_comprehensive_v3 的数据，只提取投料量字段
         """
-        print(f" 开始累计投料量（V3）: {start_time} ~ {end_time}")
+        logger.info("[Export] 开始累计投料量(V3): %s ~ %s", start_time, end_time)
         
         # 复用综合导出的数据
         comprehensive_data = self.export_comprehensive_v3(start_time, end_time)
@@ -2167,7 +2170,7 @@ class DataExportService:
                 "daily_records": daily_records
             })
         
-        print(f"[OK] 累计投料量完成（V3）: {len(result['hoppers'])} 个设备")
+        logger.info("[Export] 累计投料量完成(V3): %s 个设备", len(result['hoppers']))
         return result
     
     # ------------------------------------------------------------
@@ -2184,7 +2187,7 @@ class DataExportService:
         
         注意：需要从 daily_summary 表或实时计算中获取 start_reading 和 end_reading
         """
-        print(f" 开始电量统计（V3）: {start_time} ~ {end_time}")
+        logger.info("[Export] 开始电量统计(V3): %s ~ %s", start_time, end_time)
         
         # 1. 按自然日切分时间段
         slices = split_time_range_by_natural_days(start_time, end_time)
@@ -2299,7 +2302,7 @@ class DataExportService:
             elif device_type == "fan":
                 result["fan_devices"].append(device_data_obj)
         
-        print(f"[OK] 电量统计完成（V3）")
+        logger.info("[Export] 电量统计完成(V3)")
         return result
 
 

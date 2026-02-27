@@ -7,10 +7,13 @@
 # 3. _load_device_modules()     - [私有] 加载设备模块配置
 # ============================================================
 
+import logging
+import yaml
 from typing import Dict, Any, List
 from datetime import datetime
 from pathlib import Path
-import yaml
+
+logger = logging.getLogger(__name__)
 from app.plc.s7_client import get_s7_client
 from app.plc.module_parser import ModuleParser
 from config import get_settings
@@ -50,7 +53,7 @@ class PLCService:
         """重新加载配置 (模块定义 + 设备映射)"""
         self.parser.load_module_configs()
         self._load_device_modules()
-        print("[OK] PLCService 配置已重新加载")
+        logger.info("[PLCService] 配置已重新加载")
     
     # ------------------------------------------------------------
     # 2. read_device_data() - 读取设备数据

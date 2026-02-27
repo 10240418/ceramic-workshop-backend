@@ -9,11 +9,14 @@
 # 5. get_device_list()       - 获取设备列表
 # ============================================================
 
+import logging
 import struct
 import yaml
 from typing import Dict, List, Any
 from pathlib import Path
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 class HopperParser:
@@ -79,7 +82,8 @@ class HopperParser:
                 device['category'] = 'long_hopper'
                 self.devices.append(device)
         
-        print(f"[OK] DB6解析器初始化完成: {len(self.devices)}个设备, DB{self.db_config['db_number']}, 总大小{self.db_config['total_size']}字节")
+        logger.info("[HopperParser] DB%s解析器初始化完成: %s个设备, DB%s, 总大小%s字节",
+                     self.db_config['db_number'], len(self.devices), self.db_config['db_number'], self.db_config['total_size'])
     
     # ------------------------------------------------------------
     # 3. parse_module() - 解析单个模块数据
@@ -141,7 +145,7 @@ class HopperParser:
                 }
             
             except Exception as e:
-                print(f"[WARN]  解析字段失败 {module_type}.{field_name} @ offset {offset + field_offset}: {e}")
+                logger.warning("[HopperParser] 解析字段失败 %s.%s @ offset %s: %s", module_type, field_name, offset + field_offset, e)
                 parsed_fields[field_name] = {
                     'value': 0.0,
                     'display_name': field.get('display_name', field_name),
@@ -190,7 +194,7 @@ class HopperParser:
                 results.append(device_result)
             
             except Exception as e:
-                print(f"[WARN]  解析设备失败 {device['device_id']}: {e}")
+                logger.warning("[HopperParser] 解析设备失败 %s: %s", device['device_id'], e)
         
         return results
     

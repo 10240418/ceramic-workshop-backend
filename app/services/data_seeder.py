@@ -4,14 +4,17 @@
 # 功能: 启动时自动插入模拟数据，确保 list 接口永远不为空
 # ============================================================
 
+import logging
 import random
 from datetime import datetime, timedelta
 from app.core.influxdb import write_point
 
+logger = logging.getLogger(__name__)
+
 
 def seed_mock_data():
     """插入模拟数据到 InfluxDB，确保所有设备都有初始数据"""
-    print(" 开始插入模拟数据...")
+    logger.info("[Seeder] 开始插入模拟数据...")
     
     try:
         # 1. 料仓数据 (9个料仓)
@@ -26,10 +29,10 @@ def seed_mock_data():
         # 4. 风机数据 (2台)
         seed_fan_data()
         
-        print("[OK] 模拟数据插入完成！")
+        logger.info("[Seeder] 模拟数据插入完成")
         return True
     except Exception as e:
-        print(f"[ERROR] 模拟数据插入失败: {str(e)}")
+        logger.error("[Seeder] 模拟数据插入失败: %s", e, exc_info=True)
         return False
 
 
@@ -104,7 +107,7 @@ def seed_hopper_data():
             }
         )
     
-    print(f"  [OK] 插入 {len(hoppers)} 个料仓的模拟数据")
+    logger.info("[Seeder] 插入 %s 个料仓的模拟数据", len(hoppers))
 
 
 def seed_roller_kiln_data():
@@ -149,7 +152,7 @@ def seed_roller_kiln_data():
             }
         )
     
-    print(f"  [OK] 插入辊道窑 {len(zones)} 个温区的模拟数据")
+    logger.info("[Seeder] 插入辊道窯 %s 个温区的模拟数据", len(zones))
 
 
 def seed_scr_data():
@@ -195,7 +198,7 @@ def seed_scr_data():
             }
         )
     
-    print(f"  [OK] 插入 {len(scr_devices)} 台SCR设备的模拟数据")
+    logger.info("[Seeder] 插入 %s 台SCR设备的模拟数据", len(scr_devices))
 
 
 def seed_fan_data():
@@ -225,4 +228,4 @@ def seed_fan_data():
             }
         )
     
-    print(f"  [OK] 插入 {len(fan_devices)} 台风机的模拟数据")
+    logger.info("[Seeder] 插入 %s 台风机的模拟数据", len(fan_devices))

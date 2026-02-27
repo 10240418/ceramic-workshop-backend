@@ -44,24 +44,25 @@ class MockService:
         self._base_values = {
             # 料仓重量 (kg), 0表示料仓停止/空, 范围 0-300kg
             'hopper_weight': [250, 220, 0, 0, 0, 0, 180, 260, 0],
-            # 运行时温度 (°C), 全部回转窑约 1400°C
-            'hopper_temp': [1409, 1422, 1477, 1388, 1479, 1577, 1390, 1405, 1370],
-            # 运行时电功率 (kW), 期望输出 16-20kW
-            'hopper_power': [18.0, 17.5, 19.0, 18.5, 20.0, 19.5, 17.0, 16.5, 18.0],
+            # 运行时温度 (°C) - 分布在正常/警告范围，由尖峰机制触发报警(>1400°C)
+            # short 900-1200 (部分正常/部分警告), no_hopper 1100-1200 (警告), long 750-850 (正常)
+            'hopper_temp': [900, 950, 1200, 1150, 1150, 1200, 750, 800, 850],
+            # 运行时电功率 (kW) - 处于警告范围(10-50kW)，由功率尖峰触发报警(>50kW)
+            'hopper_power': [18.0, 17.5, 19.0, 18.5, 22.0, 20.0, 17.0, 16.5, 15.0],
             # 累计电量基础值 (kWh), 期望输出 6000-10000kWh
             'hopper_energy': [7200, 6800, 8100, 7600, 9000, 8500, 6500, 7000, 6200],
-            # 辊道窑6温区温度 (°C), 热梯度分布
-            'roller_temp': [450, 680, 920, 1080, 1050, 780],
+            # 辊道窑6温区温度 (°C) - 热梯度分布，zone3-5 处于警告范围(800-1000°C)
+            'roller_temp': [450, 680, 850, 950, 900, 780],
             # 辊道窑各温区功率 (kW), 期望输出 16-25kW/zone
             'roller_power': [18.0, 20.0, 22.0, 25.0, 24.0, 19.0],
             # 辊道窑各温区累计电量基础值 (kWh), 期望输出 6000-10000kWh
             'roller_energy': [7500, 8200, 9000, 9800, 9200, 7800],
             # SCR氨水泵实时流量 (L/min), 约 429 L/min
             'scr_flow': [429.0, 380.0],
-            # SCR氨水泵功率 (kW)
-            'scr_power': [0.5, 1.2],
-            # 风机功率 (kW)
-            'fan_power': [2.4, 3.2],
+            # SCR氨水泵功率 (kW) - 正常值低于报警阈值0.1kW，由尖峰触发报警
+            'scr_power': [0.03, 0.04],
+            # 风机功率 (kW) - 正常值低于报警阈值1.0kW，由尖峰触发报警
+            'fan_power': [0.45, 0.55],
         }
 
         self._tick = 0
@@ -113,6 +114,20 @@ class MockService:
         self._alarm_spike_factor: List[float] = [1.0] * 9
         # 下次触发报警峰值的倒计时
         self._next_alarm_trigger_countdown = self._rnd.randint(10, 25)
+
+        # 功率尖峰倒计时 (回转窑功率 > 50kW)
+        self._power_spike_countdown: List[int] = [0] * 9
+        self._power_spike_factor: List[float] = [1.0] * 9
+        self._next_power_spike_countdown = self._rnd.randint(15, 30)
+        # 辊道窑温度尖峰 (zone 温度 > 1000°C)
+        self._roller_spike_countdown: List[int] = [0] * 6
+        self._roller_spike_factor: List[float] = [1.0] * 6
+        # 风机/SCR 功率尖峰
+        self._fan_spike_countdown: List[int] = [0] * 2
+        self._fan_spike_factor: List[float] = [1.0] * 2
+        self._scr_spike_countdown: List[int] = [0] * 2
+        self._scr_spike_factor: List[float] = [1.0] * 2
+        self._next_aux_spike_countdown = self._rnd.randint(12, 28)
 
         if self._profile == "stable":
             self._noise_scale = 0.45
@@ -221,21 +236,82 @@ class MockService:
                 running_indices = [i for i in range(9) if self._kiln_running[i]]
                 if running_indices:
                     target_idx = self._rnd.choice(running_indices)
-                    # 峰值倍率: 1.05-1.12 (超过常规运行温度约5-12%)
-                    # 对于1400°C的窑: 1400*1.10=1540°C，若阈值设在1450/1500°C则会报警
-                    spike_factor = self._rnd.uniform(1.05, 1.12)
+                    # 峰值倍率: 1.20-1.40 (使 1200°C×1.25=1500°C 超过报警阈值 1400°C)
+                    spike_factor = self._rnd.uniform(1.20, 1.40)
                     spike_duration = self._rnd.randint(3, 8)
                     self._alarm_spike_countdown[target_idx] = spike_duration
                     self._alarm_spike_factor[target_idx] = spike_factor
                 interval = self._rnd.randint(8, 20) if self._alarm_test_mode else self._rnd.randint(20, 50)
                 self._next_alarm_trigger_countdown = interval
 
-            # 更新峰值倒计时
+            # 更新温度峰值倒计时
             for i in range(9):
                 if self._alarm_spike_countdown[i] > 0:
                     self._alarm_spike_countdown[i] -= 1
                     if self._alarm_spike_countdown[i] <= 0:
                         self._alarm_spike_factor[i] = 1.0
+
+        # --------------------------------------------------------
+        # 4. 功率尖峰 (all modes) - 回转窑功率偶尔超过50kW报警阈值
+        # --------------------------------------------------------
+        self._next_power_spike_countdown -= 1
+        if self._next_power_spike_countdown <= 0:
+            running_indices = [i for i in range(9) if self._kiln_running[i]]
+            if running_indices:
+                target_idx = self._rnd.choice(running_indices)
+                # factor 3.0 × 18kW = 54kW > 50kW 报警阈值
+                self._power_spike_countdown[target_idx] = self._rnd.randint(2, 6)
+                self._power_spike_factor[target_idx] = self._rnd.uniform(2.8, 3.5)
+            interval = self._rnd.randint(8, 18) if self._alarm_test_mode else self._rnd.randint(30, 80)
+            self._next_power_spike_countdown = interval
+
+        for i in range(9):
+            if self._power_spike_countdown[i] > 0:
+                self._power_spike_countdown[i] -= 1
+                if self._power_spike_countdown[i] <= 0:
+                    self._power_spike_factor[i] = 1.0
+
+        # --------------------------------------------------------
+        # 5. 辊道窑温度尖峰 + 风机/SCR功率尖峰 (all modes)
+        # --------------------------------------------------------
+        self._next_aux_spike_countdown -= 1
+        if self._next_aux_spike_countdown <= 0:
+            # 辊道窑: 随机选一个温区触发温度尖峰 (>1000°C)
+            zone_idx = self._rnd.randint(0, 5)
+            self._roller_spike_countdown[zone_idx] = self._rnd.randint(2, 5)
+            # factor × 950°C = 1045~1140°C > 1000°C 报警阈值
+            self._roller_spike_factor[zone_idx] = self._rnd.uniform(1.10, 1.20)
+
+            # 风机: 随机触发一个功率尖峰 (>1.0kW)
+            fan_idx = self._rnd.randint(0, 1)
+            self._fan_spike_countdown[fan_idx] = self._rnd.randint(2, 6)
+            # factor × 0.5kW = 1.25~2.0kW > 1.0kW 报警阈值
+            self._fan_spike_factor[fan_idx] = self._rnd.uniform(2.5, 4.0)
+
+            # SCR: 随机触发一个功率尖峰 (>0.1kW)
+            scr_idx = self._rnd.randint(0, 1)
+            self._scr_spike_countdown[scr_idx] = self._rnd.randint(2, 6)
+            # factor × 0.04kW = 0.16~0.24kW > 0.1kW 报警阈值
+            self._scr_spike_factor[scr_idx] = self._rnd.uniform(4.0, 6.0)
+
+            interval = self._rnd.randint(10, 20) if self._alarm_test_mode else self._rnd.randint(25, 60)
+            self._next_aux_spike_countdown = interval
+
+        for i in range(6):
+            if self._roller_spike_countdown[i] > 0:
+                self._roller_spike_countdown[i] -= 1
+                if self._roller_spike_countdown[i] <= 0:
+                    self._roller_spike_factor[i] = 1.0
+
+        for i in range(2):
+            if self._fan_spike_countdown[i] > 0:
+                self._fan_spike_countdown[i] -= 1
+                if self._fan_spike_countdown[i] <= 0:
+                    self._fan_spike_factor[i] = 1.0
+            if self._scr_spike_countdown[i] > 0:
+                self._scr_spike_countdown[i] -= 1
+                if self._scr_spike_countdown[i] <= 0:
+                    self._scr_spike_factor[i] = 1.0
 
     def _add_noise(self, base: float, noise_range: float = 0.03) -> float:
         noise = self._rnd.uniform(-noise_range * self._noise_scale, noise_range * self._noise_scale)
@@ -411,10 +487,11 @@ class MockService:
             base_power = self._base_values['hopper_power'][i]
             energy_base = self._base_values['hopper_energy'][i]
 
-            # 应用报警峰值因子 (alarm_test/aggressive 模式)
+            # 应用温度尖峰因子 (alarm_test/aggressive 模式)
             spike = self._alarm_spike_factor[i]
             eff_temp = base_temp * spike
-            eff_power = base_power * (0.88 + self._rnd.uniform(0.0, 0.30)) if running else 0.2
+            # 应用功率尖峰因子 (all modes, factor > 1 时超过 50kW 报警阈值)
+            eff_power = base_power * self._power_spike_factor[i] * (0.88 + self._rnd.uniform(0.0, 0.30)) if running else 0.2
 
             data += self.generate_weigh_sensor(i)
             data += self.generate_temperature_sensor(eff_temp, kiln_running=running)
@@ -433,7 +510,7 @@ class MockService:
 
             spike = self._alarm_spike_factor[idx]
             eff_temp = base_temp * spike
-            eff_power = base_power * (0.88 + self._rnd.uniform(0.0, 0.25)) if running else 0.2
+            eff_power = base_power * self._power_spike_factor[idx] * (0.88 + self._rnd.uniform(0.0, 0.25)) if running else 0.2
 
             data += self.generate_temperature_sensor(eff_temp, kiln_running=running)
             if running:
@@ -451,7 +528,7 @@ class MockService:
 
             spike = self._alarm_spike_factor[idx]
             eff_temp = base_temp * spike
-            eff_power = base_power * (0.88 + self._rnd.uniform(0.0, 0.30)) if running else 0.2
+            eff_power = base_power * self._power_spike_factor[idx] * (0.88 + self._rnd.uniform(0.0, 0.30)) if running else 0.2
 
             data += self.generate_weigh_sensor(idx)
             data += self.generate_temperature_sensor(eff_temp, kiln_running=running)
@@ -468,9 +545,9 @@ class MockService:
     def generate_db9_data(self) -> bytes:
         data = b''
         for i in range(6):
-            # 辊道窑温度: 正弦波缓慢变化，幅度±2%，周期120 ticks
-            temp = self._add_sine_wave(self._base_values['roller_temp'][i], amplitude=0.02, period=120)
-            temp = max(0.0, temp + self._rnd.uniform(-5, 5))
+            # 辊道窑温度: 正弦波缓慢变化，幅度±4%，叠加温度尖峰因子
+            temp = self._add_sine_wave(self._base_values['roller_temp'][i], amplitude=0.04, period=120)
+            temp = max(0.0, temp * self._roller_spike_factor[i] + self._rnd.uniform(-8, 8))
             data += self.generate_temperature_sensor(temp, kiln_running=True)
 
         # 辊道窑总电表 (ratio=60 对应辊道窑变比)
@@ -495,7 +572,7 @@ class MockService:
         for i in range(2):
             data += self.generate_flow_meter(i)
             data += self.generate_electricity_meter(
-                self._base_values['scr_power'][i],
+                self._base_values['scr_power'][i] * self._scr_spike_factor[i],
                 200 + i * 120,  # 氨水泵累计电量基础 (kWh), SCR功率小所以能耗也小
                 'scr', i,
             )
@@ -503,7 +580,7 @@ class MockService:
         # 风机 x2
         for i in range(2):
             data += self.generate_electricity_meter(
-                self._base_values['fan_power'][i],
+                self._base_values['fan_power'][i] * self._fan_spike_factor[i],
                 380 + i * 150,  # 风机累计电量基础 (kWh)
                 'fan', i,
             )

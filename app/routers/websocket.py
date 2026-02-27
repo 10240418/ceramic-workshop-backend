@@ -59,12 +59,19 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info("[WS] 客户端主动断开连接")
                 break
             except Exception as e:
+                err_str = str(e)
                 logger.warning(f"[WS] 接收消息失败: {e}")
-                await manager.send_personal(websocket, {
-                    "type": "error",
-                    "code": ErrorCode.INVALID_MESSAGE,
-                    "message": "无效的 JSON 消息格式",
-                })
+                # WebSocket 已关闭，退出循环，不再重试
+                if "not connected" in err_str.lower() or "accept" in err_str.lower():
+                    break
+                try:
+                    await manager.send_personal(websocket, {
+                        "type": "error",
+                        "code": ErrorCode.INVALID_MESSAGE,
+                        "message": "无效的 JSON 消息格式",
+                    })
+                except Exception:
+                    break
                 continue
 
             msg_type = data.get("type")

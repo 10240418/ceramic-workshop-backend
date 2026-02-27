@@ -12,10 +12,13 @@
 # 8. query_db_devices()           - 按DB块查询设备
 # ============================================================
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from influxdb_client import InfluxDBClient
 from functools import lru_cache
+
+logger = logging.getLogger(__name__)
 
 from config import get_settings
 from app.core.influxdb import get_influx_client
@@ -80,7 +83,7 @@ class HistoryQueryService:
             
             return latest_time
         except Exception as e:
-            print(f"[WARN]  获取最新时间戳失败: {str(e)}")
+            logger.warning("[History] 获取最新时间戳失败: %s", e)
             return None
     
     # ------------------------------------------------------------
@@ -182,7 +185,7 @@ class HistoryQueryService:
             return device_list
         except Exception as e:
             # 查询失败时，返回兜底列表
-            print(f"[WARN]  设备列表查询失败: {str(e)}，返回兜底数据")
+            logger.warning("[History] 设备列表查询失败: %s, 返回兗底数据", e)
             return self._get_fallback_device_list(device_type)
     
     def _get_fallback_device_list(self, device_type: Optional[str] = None) -> List[Dict[str, Any]]:

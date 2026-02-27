@@ -15,6 +15,11 @@ if sys.stdout is None:
 if sys.stderr is None:
     sys.stderr = open(os.devnull, 'w', encoding='utf-8')
 
+# [CRITICAL] 崩溃防护 - 必须在所有业务 import 之前安装
+# 捕获: 未处理异常 / 线程崩溃 / OS 信号 (SIGTERM/SIGINT/SIGBREAK)
+from app.core.crash_guard import install as _install_crash_guard
+_install_crash_guard()
+
 from contextlib import asynccontextmanager
 import logging
 from fastapi import FastAPI
@@ -41,26 +46,35 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """应用启动和关闭时的生命周期管理"""
     # 启动时
-    print("[START] 应用启动中...")
-    logger.info(f"[LOG] error 级别日志文件: {error_log_path} (保留 {settings.log_retention_days} 天)")
+    logger.info("[START] 应用启动中...")
+    logger.info("[LOG] error 级别日志文件: %s (保留 %d 天)", error_log_path, settings.log_retention_days)
     
     # 1. 加载配置文件
-    print("[DATA] 初始化配置...")
+    logger.info("[DATA] 初始化配置...")
     env_file = get_active_env_file()
     if env_file:
-        print(f"[文件] 已加载配置文件: {env_file}")
+        logger.info("[文件] 已加载配置文件: %s", env_file)
     else:
-        print("[WARN] 未找到 .env 文件，使用默认配置和系统环境变量")
+        logger.warning("[配置] 未找到 .env 文件, 使用默认配置和系统环境变量")
     
-    # [TEST] 显示关键配置值
-    print(f"[TEST][配置] MOCK_MODE={settings.mock_mode}")
-    print(f"[TEST][配置] ENABLE_POLLING={settings.enable_polling}")
-    print(f"[TEST][配置] PLC_POLL_INTERVAL={settings.plc_poll_interval}s")
-    print(f"[TEST][配置] REALTIME_POLL_INTERVAL={settings.realtime_poll_interval}s")
-    print(f"[TEST][配置] STATUS_POLL_INTERVAL={settings.status_poll_interval}s")
-    print(f"[TEST][配置] BATCH_WRITE_SIZE={settings.batch_write_size}")
-    
-    print("[INFO] 配置加载完成")
+    logger.info("[INFO] 配置加载完成")
+
+    # 1.05 启动时验证 InfluxDB 连接和认证
+    _token_masked = settings.influx_token[:8] + "..." + settings.influx_token[-4:] if len(settings.influx_token) > 12 else "***"
+    logger.info("[InfluxDB] URL: %s | Org: %s | Bucket: %s | Token: %s",
+                settings.influx_url, settings.influx_org, settings.influx_bucket, _token_masked)
+    try:
+        from app.core.influxdb import get_influx_client
+        _test_client = get_influx_client()
+        _buckets = _test_client.buckets_api().find_buckets()
+        _bucket_names = [b.name for b in _buckets.buckets] if _buckets and _buckets.buckets else []
+        if settings.influx_bucket in _bucket_names:
+            logger.info("[InfluxDB] 认证成功, bucket '%s' 存在 (共 %d 个 bucket)", settings.influx_bucket, len(_bucket_names))
+        else:
+            logger.error("[InfluxDB] 认证成功但 bucket '%s' 不存在! 可用: %s", settings.influx_bucket, _bucket_names)
+    except Exception as e:
+        logger.error("[InfluxDB] 认证失败! Token 可能无效. 错误: %s", e)
+        logger.error("[InfluxDB] 请检查 .env 中的 INFLUX_TOKEN 是否与工控机 InfluxDB 匹配")
 
     # 1.1 校验 python-snap7 版本（真实 PLC 模式，固定要求 2.0.2）
     if not settings.mock_mode:
@@ -71,12 +85,12 @@ async def lifespan(app: FastAPI):
         logger.info(f"[PLC] {message}")
     
     # 2. 自动迁移 InfluxDB Schema
-    print("\n[DATA] 检查 InfluxDB Schema...")
+    logger.info("[DATA] 检查 InfluxDB Schema...")
     from app.core.influx_migration import auto_migrate_on_startup
     if auto_migrate_on_startup():
-        print("[INFO] InfluxDB Schema 迁移完成\n")
+        logger.info("[INFO] InfluxDB Schema 迁移完成")
     else:
-        print("[WARN]  InfluxDB 迁移失败，但服务继续启动\n")
+        logger.warning("[WARN] InfluxDB 迁移失败, 但服务继续启动")
     
     # 3. 插入模拟数据（确保 list 接口不为空）
     # [禁止] 暂时禁用：使用手动插入的测试数据
@@ -90,24 +104,24 @@ async def lifespan(app: FastAPI):
 
     if should_start_polling:
         await start_polling()
-        print("[INFO] 轮询服务已启动")
+        logger.info("[INFO] 轮询服务已启动")
 
         # 5. 启动投料分析服务 v6.0 (从 DB 还原投料总量)
         await feeding_analysis_service.restore_from_db()
         logger.info("[Feeding] v6.0 已就绪 (由 polling_service 驱动)")
     else:
-        print("[INFO]  轮询服务已禁用 (ENABLE_POLLING=false)")
-        print("   数据将由外部mock服务提供")
+        logger.info("[INFO] 轮询服务已禁用 (ENABLE_POLLING=false)")
+        logger.info("[INFO] 数据将由外部mock服务提供")
 
     # 6. 启动 WebSocket 推送任务
     ws_manager = get_ws_manager()
     await ws_manager.start_push_tasks()
-    print("[INFO] WebSocket 推送任务已启动")
+    logger.info("[INFO] WebSocket 推送任务已启动")
 
     yield
 
     # 关闭时
-    print("[STOP] 应用关闭中...")
+    logger.info("[STOP] 应用关闭中...")
 
     # 先停止 WebSocket 推送任务
     await ws_manager.stop_push_tasks()
@@ -119,11 +133,7 @@ async def lifespan(app: FastAPI):
     from app.core.influxdb import close_influx_client
     close_influx_client()
     
-    # [FIX] 关闭本地缓存数据库连接
-    from app.core.local_cache import get_local_cache
-    get_local_cache().close()
-    
-    print("[INFO] 所有资源已释放")
+    logger.info("[INFO] 所有资源已释放")
 
 
 # ------------------------------------------------------------
@@ -205,6 +215,13 @@ _UVICORN_LOG_CONFIG = {
 
 
 if __name__ == "__main__":
+    # [CRITICAL] 安全检查: 确保 influxdb_client/numpy 可正常导入
+    # 防止 numpy .pyc 损坏导致进程卡死在 import 阶段
+    from app.core.crash_guard import safe_import_influxdb
+    if not safe_import_influxdb(timeout_sec=30):
+        print("[ERROR] influxdb_client/numpy 导入异常，已清理缓存，请重新启动")
+        sys.exit(1)
+
     # 1. 委托给托盘应用，行为与打包 exe 完全一致
     #    - PyQt5 系统托盘（绿=运行，红=停止）
     #    - 日志窗口实时追踪 logs/server.log

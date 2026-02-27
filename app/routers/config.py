@@ -13,6 +13,9 @@
 # ============================================================
 
 from fastapi import APIRouter, HTTPException
+import logging
+
+logger = logging.getLogger(__name__)
 from pydantic import BaseModel
 from typing import Optional
 
@@ -138,7 +141,7 @@ async def update_plc_config(config: PLCConfigUpdate):
             )
         except Exception as e:
             # 更新失败不影响配置保存
-            pass
+            logger.warning("[Config] S7 client update failed: %s", e)
     
     return ApiResponse.ok({
         "message": "配置更新成功（已立即生效）",
@@ -166,6 +169,7 @@ async def test_plc_connection():
             "plc_ip": plc_config["ip_address"]
         })
     except Exception as e:
+        logger.error("[Config] test PLC connection failed: %s", e, exc_info=True)
         plc_config = get_runtime_plc_config()
         return ApiResponse.fail(f"PLC连接失败: {str(e)}")
 
@@ -233,6 +237,7 @@ async def get_db_mappings():
             "mappings": mappings
         })
     except Exception as e:
+        logger.error("[Config] read DB mappings failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"读取配置失败: {str(e)}")
 
 
@@ -312,5 +317,6 @@ async def get_db_devices_config(db_number: int):
             "devices": devices
         })
     except Exception as e:
+        logger.error("[Config] read DB device config failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"读取配置失败: {str(e)}")
 

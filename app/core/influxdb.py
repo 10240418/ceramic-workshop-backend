@@ -15,10 +15,12 @@ from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS, WriteApi
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
+import logging
 import threading
 
 from config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # 1, 写入锁 - 防止并发写入导致数据竞争
@@ -75,7 +77,7 @@ def close_influx_client() -> None:
         try:
             _write_api.close()
         except Exception as e:
-            print(f"[WARN] 关闭 write_api 失败: {e}")
+            logger.warning("[InfluxDB] 关闭 write_api 失败: %s", e)
         finally:
             _write_api = None
     
@@ -83,9 +85,9 @@ def close_influx_client() -> None:
     if _influx_client is not None:
         try:
             _influx_client.close()
-            print("[OK] InfluxDB 客户端已关闭")
+            logger.info("[InfluxDB] 客户端已关闭")
         except Exception as e:
-            print(f"[WARN] 关闭 InfluxDB 客户端失败: {e}")
+            logger.warning("[InfluxDB] 关闭客户端失败: %s", e)
         finally:
             _influx_client = None
 
@@ -137,7 +139,7 @@ def write_point(measurement: str, tags: Dict[str, str], fields: Dict[str, Any], 
             )
         return True
     except Exception as e:
-        print(f"[ERROR] InfluxDB 写入失败: {e}")
+        logger.error("[InfluxDB] 写入失败: %s", e, exc_info=True)
         return False
 
 
@@ -298,5 +300,5 @@ def query_data(
         
         return data
     except Exception as e:
-        print(f"[ERROR] InfluxDB 查询失败: {e}")
+        logger.error("[InfluxDB] 查询失败: %s", e, exc_info=True)
         return []

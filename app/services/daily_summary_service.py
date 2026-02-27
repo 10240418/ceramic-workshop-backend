@@ -8,10 +8,13 @@
 # 4. get_daily_summary()                 - 查询日汇总数据
 # ============================================================
 
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from influxdb_client import Point
+
+logger = logging.getLogger(__name__)
 
 from app.core.influxdb import build_point, get_influx_client, write_points_batch
 from config import get_settings
@@ -108,7 +111,7 @@ class DailySummaryService:
         day_start = target_dt.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
         day_end = day_start + timedelta(days=1)
 
-        print(f"[INFO] 开始计算日汇总: {date_label}")
+        logger.info("[DailySummary] 开始计算日汇总: %s", date_label)
 
         all_points: List[Point] = []
         devices_processed = 0
@@ -187,9 +190,9 @@ class DailySummaryService:
             success, err = write_points_batch(all_points)
             if success:
                 points_written = len(all_points)
-                print(f"[OK] 日汇总写入完成: {date_label}, {points_written} 个数据点")
+                logger.info("[DailySummary] 日汇总写入完成: %s, %s 个数据点", date_label, points_written)
             else:
-                print(f"[ERROR] 日汇总写入失败: {date_label}, {err}")
+                logger.error("[DailySummary] 日汇总写入失败: %s, %s", date_label, err)
                 return {
                     "date": date_label,
                     "success": False,
@@ -198,7 +201,7 @@ class DailySummaryService:
                     "points_written": 0,
                 }
         else:
-            print(f"[WARN] 日汇总: {date_label} 无有效数据点")
+            logger.warning("[DailySummary] 日汇总: %s 无有效数据点", date_label)
 
         return {
             "date": date_label,
@@ -245,7 +248,7 @@ class DailySummaryService:
         existing_set = set(existing_dates)
         missing_dates = [d for d in expected_dates if d not in existing_set]
 
-        print(f"[INFO] 检测缺失日期: 共 {len(expected_dates)} 天, 缺失 {len(missing_dates)} 天")
+        logger.info("[DailySummary] 检测缺失日期: 共 %s 天, 缺失 %s 天", len(expected_dates), len(missing_dates))
 
         filled_dates = []
         for date_str in missing_dates:
@@ -284,7 +287,7 @@ class DailySummaryService:
                         dates.add(str(date_val))
             return sorted(dates)
         except Exception as e:
-            print(f"[ERROR] 获取可用日期失败: {e}")
+            logger.error("[DailySummary] 获取可用日期失败: %s", e, exc_info=True)
             return []
 
     # ------------------------------------------------------------
@@ -339,7 +342,7 @@ class DailySummaryService:
             records.sort(key=lambda r: r["date"])
             return records
         except Exception as e:
-            print(f"[ERROR] 查询日汇总失败: {e}")
+            logger.error("[DailySummary] 查询日汇总失败: %s", e, exc_info=True)
             return []
 
     # ============================================================
@@ -383,7 +386,7 @@ class DailySummaryService:
                 if first_val is not None:
                     break
         except Exception as e:
-            print(f"[WARN] 查询首值失败 ({device_id}/{field}): {e}")
+            logger.warning("[DailySummary] 查询首值失败 (%s/%s): %s", device_id, field, e)
 
         try:
             result = self.query_api.query(last_q)
@@ -394,7 +397,7 @@ class DailySummaryService:
                 if last_val is not None:
                     break
         except Exception as e:
-            print(f"[WARN] 查询尾值失败 ({device_id}/{field}): {e}")
+            logger.warning("[DailySummary] 查询尾值失败 (%s/%s): %s", device_id, field, e)
 
         return (first_val, last_val)
 
@@ -577,7 +580,7 @@ class DailySummaryService:
                 timestamp=day_start,
             )
         except Exception as e:
-            print(f"[WARN] 计算投料量失败 ({device_id}): {e}")
+            logger.warning("[DailySummary] 计算投料量失败 (%s): %s", device_id, e)
             return None
 
 

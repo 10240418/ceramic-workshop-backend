@@ -4,10 +4,8 @@
 # 优化点:
 #   1. PLC 长连接 (避免频繁连接/断开)
 #   2. 批量写入 (动态配置的.env次轮询缓存后批量写入)
-#   3. 本地降级缓存 (InfluxDB 故障时写入 SQLite)
-#   4. 自动重试机制 (缓存数据自动重试)
-#   5. 内存缓存 (供 API 直接读取最新数据)
-#   6. Mock模式支持 (使用模拟数据替代真实PLC)
+#   3. 内存缓存 (供 API 直接读取最新数据)
+#   4. Mock模式支持 (使用模拟数据替代真实PLC)
 # ============================================================
 
 import asyncio
@@ -23,7 +21,6 @@ from config import get_settings
 logger = logging.getLogger(__name__)
 from app.tools.timezone_tools import now_beijing, beijing_isoformat
 from app.core.influxdb import build_point, write_points_batch, check_influx_health
-from app.core.local_cache import get_local_cache, CachedPoint
 from app.plc.plc_manager import get_plc_manager
 from app.plc.parser_hopper import HopperParser
 from app.plc.parser_roller_kiln import RollerKilnParser
@@ -41,8 +38,6 @@ _mock_generator = None
 _polling_task: Optional[asyncio.Task] = None
 _realtime_polling_task: Optional[asyncio.Task] = None
 _status_polling_task: Optional[asyncio.Task] = None
-_retry_task: Optional[asyncio.Task] = None
-_cleanup_task: Optional[asyncio.Task] = None  # [FIX] 添加清理任务句柄
 _is_running = False
 
 # 解析器实例
@@ -121,11 +116,8 @@ _stats = {
     "status_polls": 0,
     "successful_writes": 0,
     "failed_writes": 0,
-    "cached_points": 0,
-    "retry_success": 0,
     "last_write_time": None,
-    "last_retry_time": None,
-    "status_errors": 0,  # 状态错误计数
+    "status_errors": 0,
 }
 
 
@@ -144,7 +136,7 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
     config_path = get_runtime_base_dir() / "configs" / "db_mappings.yaml"
     
     if not config_path.exists():
-        print(f"[WARN]  配置文件不存在: {config_path}，使用默认配置")
+        logger.warning("[Polling] 配置文件不存在: %s, 使用默认配置", config_path)
         return [(6, 554)]
     
     try:
@@ -157,16 +149,16 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
         device_status_config = config.get('device_status_config', {})
         if device_status_config.get('enabled', False):
             _device_status_db_configs = device_status_config.get('db_blocks', [])
-            print(f"[INFO] 设备状态位监控已启用: {len(_device_status_db_configs)}个DB块")
+            logger.info("[Polling] 设备状态位监控已启用: %d个DB块", len(_device_status_db_configs))
             for db_cfg in _device_status_db_configs:
-                print(f"   - DB{db_cfg['db_number']}: {db_cfg['db_name']} ({db_cfg['total_size']}字节)")
+                logger.info("[Polling]   - DB%d: %s (%d字节)", db_cfg['db_number'], db_cfg['db_name'], db_cfg['total_size'])
         
         # 加载轮询配置
         polling_config = config.get('polling_config', {})
         poll_interval = float(polling_config.get('poll_interval', 6))
         realtime_poll_interval = float(polling_config.get('realtime_poll_interval', poll_interval))
         status_poll_interval = float(polling_config.get('status_poll_interval', poll_interval))
-        print(f"[DATA] 轮询间隔配置: realtime={realtime_poll_interval}s, status={status_poll_interval}s, 兼容poll_interval={poll_interval}s")
+        logger.info("[Polling] 轮询间隔配置: realtime=%ss, status=%ss, 兼容poll_interval=%ss", realtime_poll_interval, status_poll_interval, poll_interval)
         
         # 只返回启用的DB块配置
         enabled_configs = [
@@ -175,15 +167,15 @@ def _load_db_mappings() -> List[Tuple[int, int]]:
             if mapping.get('enabled', True)
         ]
         
-        print(f"[INFO] 加载DB映射配置: {len(enabled_configs)}个DB块")
+        logger.info("[Polling] 加载DB映射配置: %d个DB块", len(enabled_configs))
         for db_num, size in enabled_configs:
             mapping = next(m for m in _db_mappings if m['db_number'] == db_num)
-            print(f"   - DB{db_num}: {mapping['db_name']} ({size}字节)")
+            logger.info("[Polling]   - DB%d: %s (%d字节)", db_num, mapping['db_name'], size)
         
         return enabled_configs
     
     except Exception as e:
-        print(f"[ERROR] 加载DB映射配置失败: {e}，使用默认配置")
+        logger.error("[Polling] 加载DB映射配置失败: %s, 使用默认配置", e, exc_info=True)
         return [(6, 554)]
 
 
@@ -243,9 +235,9 @@ def _init_parsers():
         
         if parser_class_name in parser_classes:
             _parsers[db_number] = parser_classes[parser_class_name]()
-            print(f"   [INFO] DB{db_number} -> {parser_class_name}")
+            logger.info("[Polling] DB%d -> %s", db_number, parser_class_name)
         else:
-            print(f"   [WARN]  未知的解析器类: {parser_class_name}")
+            logger.warning("[Polling] 未知的解析器类: %s", parser_class_name)
 
 
 # ============================================================
@@ -267,10 +259,10 @@ def _flush_buffer():
     if _write_queue is not None:
         try:
             _write_queue.put_nowait(points)
-            print(f"[SEND] 已将 {len(points)} 个数据点加入写入队列")
+            logger.debug("[Polling] 已将 %d 个数据点加入写入队列", len(points))
         except asyncio.QueueFull:
-            print(f"[WARN] 写入队列已满，数据转存到本地缓存")
-            _save_to_local_cache(points)
+            logger.warning("[Polling] 写入队列已满, 数据将直接同步写入")
+            _sync_write_to_influx(points)
     else:
         # 队列未初始化，使用同步写入（降级）
         _sync_write_to_influx(points)
@@ -287,20 +279,20 @@ def _sync_write_to_influx(points: List):
         if success:
             _stats["successful_writes"] += len(points)
             _stats["last_write_time"] = beijing_isoformat()
-            print(f"[INFO] 批量写入 {len(points)} 个数据点到 InfluxDB")
+            logger.debug("[Polling] 批量写入 %d 个数据点到 InfluxDB", len(points))
         else:
-            print(f"[ERROR] InfluxDB 写入失败: {err}，转存到本地缓存")
-            _save_to_local_cache(points)
+            _stats["failed_writes"] += len(points)
+            logger.error("[Polling] InfluxDB 写入失败: %s", err)
     else:
-        print(f"[WARN] InfluxDB 不可用 ({msg})，数据写入本地缓存")
-        _save_to_local_cache(points)
+        _stats["failed_writes"] += len(points)
+        logger.warning("[Polling] InfluxDB 不可用 (%s), 数据已丢弃", msg)
 
 
 async def _background_writer():
     """[FIX] [NEW] 后台写入任务 - 异步处理写入队列，不阻塞 API"""
     global _stats, _write_in_progress, _write_queue
     
-    print("[START] 后台写入任务已启动")
+    logger.info("[Polling] 后台写入任务已启动")
     
     while _is_running:
         try:
@@ -319,141 +311,31 @@ async def _background_writer():
             healthy, msg = check_influx_health()
             
             if healthy:
-                # 尝试写入 InfluxDB
                 success, err = write_points_batch(points)
                 
                 if success:
                     _stats["successful_writes"] += len(points)
                     _stats["last_write_time"] = beijing_isoformat()
-                    print(f"[INFO] [后台] 批量写入 {len(points)} 个数据点到 InfluxDB")
+                    logger.debug("[Polling] [后台] 批量写入 %d 个数据点到 InfluxDB", len(points))
                 else:
-                    print(f"[ERROR] [后台] InfluxDB 写入失败: {err}，转存到本地缓存")
-                    _save_to_local_cache(points)
+                    _stats["failed_writes"] += len(points)
+                    logger.error("[Polling] [后台] InfluxDB 写入失败: %s", err)
             else:
-                # InfluxDB 不可用，保存到本地
-                print(f"[WARN] [后台] InfluxDB 不可用 ({msg})，数据写入本地缓存")
-                _save_to_local_cache(points)
+                _stats["failed_writes"] += len(points)
+                logger.warning("[Polling] [后台] InfluxDB 不可用 (%s), 数据已丢弃", msg)
             
             _write_in_progress = False
             _write_queue.task_done()
             
         except asyncio.CancelledError:
-            print("[STOP] 后台写入任务已取消")
+            logger.info("[Polling] 后台写入任务已取消")
             break
         except Exception as e:
-            print(f"[ERROR] [后台] 写入任务异常: {e}")
+            logger.error("[Polling] [后台] 写入任务异常: %s", e, exc_info=True)
             _write_in_progress = False
-            await asyncio.sleep(1)  # 出错后等待 1 秒再继续
+            await asyncio.sleep(1)
     
-    print("[STOP] 后台写入任务已停止")
-
-
-def _save_to_local_cache(points: List):
-    """保存数据点到本地 SQLite 缓存"""
-    global _stats
-    
-    cache = get_local_cache()
-    cached_points = []
-    
-    for point in points:
-        # 提取 Point 对象的信息
-        cached_point = CachedPoint(
-            measurement=point._name,
-            tags={k: v for k, v in point._tags.items()},
-            fields={k: v for k, v in point._fields.items()},
-            timestamp=point._time.isoformat() if point._time else beijing_isoformat()
-        )
-        cached_points.append(cached_point)
-    
-    saved_count = cache.save_points(cached_points)
-    _stats["cached_points"] += saved_count
-    _stats["failed_writes"] += len(points)
-    
-    print(f"[CACHE] 已保存 {saved_count} 个数据点到本地缓存")
-
-
-# ============================================================
-# 缓存重试任务
-# ============================================================
-async def _retry_cached_data():
-    """定期重试本地缓存的数据"""
-    global _stats
-    
-    cache = get_local_cache()
-    retry_interval = 60  # 每 60 秒重试一次
-    
-    while _is_running:
-        await asyncio.sleep(retry_interval)
-        
-        # 检查 InfluxDB 健康状态
-        healthy, _ = check_influx_health()
-        if not healthy:
-            continue
-        
-        # 获取待重试数据
-        pending = cache.get_pending_points(limit=100, max_retry=5)
-        
-        if not pending:
-            continue
-        
-        print(f"[RETRY] 开始重试 {len(pending)} 条缓存数据...")
-        
-        # 重新构建 Point 对象
-        points = []
-        ids = []
-        
-        for point_id, cached_point in pending:
-            try:
-                point = build_point(
-                    cached_point.measurement,
-                    cached_point.tags,
-                    cached_point.fields,
-                    datetime.fromisoformat(cached_point.timestamp)
-                )
-                if point:
-                    points.append(point)
-                    ids.append(point_id)
-            except Exception as e:
-                print(f"[WARN] 重建 Point 失败: {e}")
-        
-        if not points:
-            continue
-        
-        # 批量写入
-        success, err = write_points_batch(points)
-        
-        if success:
-            cache.mark_success(ids)
-            _stats["retry_success"] += len(points)
-            _stats["last_retry_time"] = beijing_isoformat()
-            print(f"[INFO] 重试成功: {len(points)} 条数据已写入 InfluxDB")
-        else:
-            cache.mark_retry(ids)
-            print(f"[ERROR] 重试失败: {err}")
-
-
-# ============================================================
-# [FIX] 定期清理任务（每小时执行）
-# ============================================================
-async def _periodic_cleanup():
-    """定期清理过期缓存和执行内存维护"""
-    cleanup_interval = 3600  # 每小时清理一次
-    
-    while _is_running:
-        await asyncio.sleep(cleanup_interval)
-        
-        try:
-            # 清理本地缓存中超过7天的失败记录
-            cache = get_local_cache()
-            cache.cleanup_old(days=7)
-            
-            # 记录当前内存使用情况（仅用于调试）
-            import gc
-            gc.collect()  # 强制垃圾回收
-            
-            print(f"[CLEANUP] 定期清理完成 | 设备缓存: {len(_latest_data)}")
-        except Exception as e:
-            print(f"[WARN] 定期清理任务异常: {e}")
+    logger.info("[Polling] 后台写入任务已停止")
 
 
 
@@ -503,7 +385,7 @@ async def _poll_realtime_data_loop():
                 for db_num, size in db_configs:
                     success, db_data, err = plc.read_db(db_num, 0, size)
                     if not success:
-                        print(f"[ERROR] DB{db_num} 读取失败: {err}")
+                        logger.error("[Polling] DB%d 读取失败: %s", db_num, err)
                         continue
 
                     if db_num in _parsers:
@@ -515,9 +397,7 @@ async def _poll_realtime_data_loop():
             global _latest_timestamp, _buffer_count
             _latest_timestamp = timestamp
 
-            # [TEST] 触发WebSocket推送事件
             get_realtime_updated_event().set()
-            logger.info(f"[TEST][POLL→WS] 实时数据轮询完成 | 设备数={len(all_devices)} | 触发WebSocket推送事件")
 
             written_count = 0
             for device in all_devices:
@@ -545,24 +425,21 @@ async def _poll_realtime_data_loop():
 
             buffer_usage = len(_point_buffer) / 1000
             if buffer_usage > 0.5:
-                print(f"[WARN] 缓冲区使用率过高: {buffer_usage*100:.1f}% (将触发批量写入)")
+                logger.warning("[Polling] 缓冲区使用率过高: %.1f%% (将触发批量写入)", buffer_usage*100)
 
             if _buffer_count >= _batch_size or len(_point_buffer) >= 500:
                 _flush_buffer()
 
-            if settings.verbose_polling_log or poll_count % 10 == 0:
-                cache_stats = get_local_cache().get_stats()
-                print(f"[DATA][realtime][poll #{poll_count}] "
-                      f"设备: {len(all_devices)} | "
-                      f"数据点: {written_count} | "
-                      f"批次进度={_buffer_count}/{_batch_size}次 | "
-                      f"缓冲点={len(_point_buffer)} | "
-                      f"待重试={cache_stats['pending_count']}")
+            # [注释] 删除频繁的轮询日志，避免日志过多
+            # if settings.verbose_polling_log or poll_count % 10 == 0:
+            #     print(f"[DATA][realtime][poll #{poll_count}] "
+            #           f"设备: {len(all_devices)} | "
+            #           f"数据点: {written_count} | "
+            #           f"批次进度={_buffer_count}/{_batch_size}次 | "
+            #           f"缓冲点={len(_point_buffer)}")
 
         except Exception as e:
-            print(f"[ERROR][realtime][poll #{poll_count}] 轮询异常: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("[Polling] [realtime] poll #%d 轮询异常: %s", poll_count, e, exc_info=True)
 
         await asyncio.sleep(realtime_interval)
 
@@ -623,18 +500,17 @@ async def _poll_device_status_loop():
                             "timestamp": timestamp.isoformat(),
                         }
                     elif not success and poll_count % 10 == 1:
-                        print(f"[WARN] 设备状态块 DB{db_num} 读取失败: {err}")
+                        logger.warning("[Polling] 设备状态块 DB%d 读取失败: %s", db_num, err)
 
             get_status_updated_event().set()
 
-            if settings.verbose_polling_log or poll_count % 20 == 0:
-                print(f"[DATA][status][poll #{poll_count}] 状态块缓存: {len(_device_status_raw)}")
+            # [注释] 删除频繁的状态位轮询日志，避免日志过多
+            # if settings.verbose_polling_log or poll_count % 20 == 0:
+            #     print(f"[DATA][status][poll #{poll_count}] 状态块缓存: {len(_device_status_raw)}")
 
         except Exception as e:
             _stats["status_errors"] += 1
-            print(f"[ERROR][status][poll #{poll_count}] 状态位轮询异常: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("[Polling] [status] poll #%d 状态位轮询异常: %s", poll_count, e, exc_info=True)
 
         await asyncio.sleep(status_interval)
 
@@ -815,17 +691,17 @@ def _add_device_to_buffer(device_data: Dict[str, Any], db_number: int, timestamp
 # ------------------------------------------------------------
 async def start_polling():
     """启动数据轮询任务（从配置文件动态加载）"""
-    global _polling_task, _realtime_polling_task, _status_polling_task, _retry_task, _is_running, _batch_size, _write_queue, _write_task, _mock_data_lock, _latest_mock_db_data
+    global _polling_task, _realtime_polling_task, _status_polling_task, _is_running, _batch_size, _write_queue, _write_task, _mock_data_lock, _latest_mock_db_data
     
     if _is_running:
-        print("[WARN] 轮询服务已在运行")
+        logger.warning("[Polling] 轮询服务已在运行")
         return
     
     # 加载DB映射配置
     _load_db_mappings()
     
     # 动态初始化解析器
-    print("[POLL][INIT] 初始化解析器")
+    logger.info("[Polling] 初始化解析器")
     _init_parsers()
     
     # 加载批量写入配置
@@ -841,15 +717,15 @@ async def start_polling():
     
     # 根据模式启动
     if settings.mock_mode:
-        print("[模拟] Mock模式 - 跳过PLC连接")
+        logger.info("[Polling] Mock模式 - 跳过PLC连接")
     else:
         # 启动 PLC 长连接
         plc = get_plc_manager()
         success, err = plc.connect()
         if success:
-            print(f"[INFO] PLC 长连接已建立")
+            logger.info("[Polling] PLC 长连接已建立")
         else:
-            print(f"[WARN] PLC 连接失败: {err}，将在轮询时重试")
+            logger.warning("[Polling] PLC 连接失败: %s, 将在轮询时重试", err)
     
     # [FIX] [NEW] 启动后台写入任务（关键：不阻塞 API）
     _write_task = asyncio.create_task(_background_writer())
@@ -858,12 +734,10 @@ async def start_polling():
     _realtime_polling_task = asyncio.create_task(_poll_realtime_data_loop())
     _status_polling_task = asyncio.create_task(_poll_device_status_loop())
     _polling_task = _realtime_polling_task
-    _retry_task = asyncio.create_task(_retry_cached_data())
-    _cleanup_task = asyncio.create_task(_periodic_cleanup())  # [FIX] 启动定期清理任务
     
     mode_str = "Mock模式" if settings.mock_mode else "正常模式"
-    print(f"[INFO] 轮询服务已启动 ({mode_str}, 实时间隔: {settings.realtime_poll_interval}s, 状态间隔: {settings.status_poll_interval}s, 批量: {_batch_size}次)")
-    print(f"[START] 后台写入模式已启用 - API 请求不会被阻塞")
+    logger.info("[Polling] 轮询服务已启动 (%s, 实时间隔: %ss, 状态间隔: %ss, 批量: %d次)", mode_str, settings.realtime_poll_interval, settings.status_poll_interval, _batch_size)
+    logger.info("[Polling] 后台写入模式已启用 - API 请求不会被阻塞")
 
 
 # ------------------------------------------------------------
@@ -871,29 +745,27 @@ async def start_polling():
 # ------------------------------------------------------------
 async def stop_polling():
     """停止数据轮询任务"""
-    global _polling_task, _realtime_polling_task, _status_polling_task, _retry_task, _cleanup_task, _write_task, _is_running, _write_queue
+    global _polling_task, _realtime_polling_task, _status_polling_task, _write_task, _is_running, _write_queue
     
     _is_running = False
     
     # 刷新缓冲区（将剩余数据放入队列）
-    print("[WAIT] 正在刷新缓冲区...")
+    logger.info("[Polling] 正在刷新缓冲区...")
     _flush_buffer()
     
     # [FIX] [NEW] 等待写入队列处理完成（最多等待 10 秒）
     if _write_queue is not None:
         try:
             await asyncio.wait_for(_write_queue.join(), timeout=10.0)
-            print("[INFO] 写入队列已清空")
+            logger.info("[Polling] 写入队列已清空")
         except asyncio.TimeoutError:
-            print("[WARN] 写入队列清空超时，部分数据可能丢失")
+            logger.warning("[Polling] 写入队列清空超时, 部分数据可能丢失")
     
     # [FIX] 取消所有任务，添加超时保护
     tasks_to_cancel = [
         ("realtime_polling", _realtime_polling_task),
         ("status_polling", _status_polling_task),
-        ("retry", _retry_task), 
-        ("cleanup", _cleanup_task),
-        ("writer", _write_task)  # [FIX] [NEW] 后台写入任务
+        ("writer", _write_task),
     ]
     
     for task_name, task in tasks_to_cancel:
@@ -904,21 +776,19 @@ async def stop_polling():
             except asyncio.CancelledError:
                 pass
             except asyncio.TimeoutError:
-                print(f"[WARN] {task_name} 任务取消超时，强制终止")
+                logger.warning("[Polling] %s 任务取消超时, 强制终止", task_name)
     
     _polling_task = None
     _realtime_polling_task = None
     _status_polling_task = None
-    _retry_task = None
-    _cleanup_task = None
-    _write_task = None  # [FIX] [NEW] 重置写入任务句柄
-    _write_queue = None  # [FIX] [NEW] 重置写入队列
+    _write_task = None
+    _write_queue = None
     
     # 断开 PLC 长连接
     plc = get_plc_manager()
     plc.disconnect()
     
-    print("[POLL][STOP] 轮询服务已停止")
+    logger.info("[Polling] 轮询服务已停止")
 
 
 # ============================================================
@@ -989,7 +859,6 @@ def is_polling_running() -> bool:
 
 def get_polling_stats() -> Dict[str, Any]:
     """获取轮询统计信息"""
-    cache_stats = get_local_cache().get_stats()
     plc_status = get_plc_manager().get_status()
     
     return {
@@ -998,7 +867,6 @@ def get_polling_stats() -> Dict[str, Any]:
         "batch_size": _batch_size,
         "devices_in_cache": len(_latest_data),
         "latest_timestamp": get_latest_timestamp(),
-        "cache_stats": cache_stats,
-        "plc_status": plc_status
+                             "plc_status": plc_status
     }
 

@@ -74,7 +74,15 @@ LOG_FILE = LOG_DIR / "server.log"
 
 # 应用标识
 APP_TITLE = "磨料车间监控系统"
-APP_ICON_PATH = WORKDIR / "assets" / "logo.png"
+
+# [FIX] 图标路径：打包后在 _internal/assets/，开发模式在 assets/
+if IS_FROZEN:
+    # 打包后：WorkshopBackend.exe 所在目录/_internal/assets/logo.png
+    APP_ICON_PATH = WORKDIR / "_internal" / "assets" / "logo.png"
+else:
+    # 开发模式：项目根目录/assets/logo.png
+    APP_ICON_PATH = WORKDIR / "assets" / "logo.png"
+
 SINGLE_INSTANCE_KEY = "workshop-backend-tray-app"
 
 # 优雅停止超时（秒）
@@ -206,16 +214,81 @@ class ServerController:
             return f"清理端口失败: {exc}"
 
     def _setup_file_logging(self) -> None:
-        """将 print() 与 logging 模块全部重定向到 logs/server.log 文件。"""
+        """将 print() 与 logging 模块全部重定向到 logs/server.log 文件。
+
+        轮转策略: 50MB 上限, 保留 3 个备份 (总计 ~200MB)
+        """
         import logging
         import io
 
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
-        # 1. 打开追加写入的文件流
-        self._log_fh = open(LOG_FILE, "a", encoding="utf-8", buffering=1)  # 行缓冲
+        MAX_LOG_SIZE = 50 * 1024 * 1024  # 50 MB
+        BACKUP_COUNT = 3
 
-        # 2. Tee 流：同时写文件和原始 stdout/stderr（开发模式下终端仍可见）
+        # 1. 自轮转文件流: 按大小自动轮转, 替代无限增长的 open()
+        class _RotatingLogFile:
+            """按大小自动轮转的日志文件写入器"""
+
+            def __init__(self, path: Path, max_bytes: int, backup_count: int):
+                self._path = path
+                self._max = max_bytes
+                self._backups = backup_count
+                self._fh = open(path, "a", encoding="utf-8", buffering=1)
+                try:
+                    self._size = path.stat().st_size
+                except OSError:
+                    self._size = 0
+
+            def write(self, s: str) -> int:
+                if not s:
+                    return 0
+                n = len(s.encode("utf-8", errors="replace"))
+                if self._size + n > self._max:
+                    self._rotate()
+                self._fh.write(s)
+                self._fh.flush()
+                self._size += n
+                return len(s)
+
+            def flush(self):
+                self._fh.flush()
+
+            def close(self):
+                try:
+                    self._fh.close()
+                except Exception:
+                    pass
+
+            def _rotate(self):
+                self._fh.close()
+                # server.log.3 -> 删除, .2 -> .3, .1 -> .2, server.log -> .1
+                for i in range(self._backups, 0, -1):
+                    src = self._path.with_name(f"{self._path.name}.{i}")
+                    if i == self._backups:
+                        try:
+                            src.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                    else:
+                        dst = self._path.with_name(f"{self._path.name}.{i + 1}")
+                        try:
+                            if src.exists():
+                                src.rename(dst)
+                        except Exception:
+                            pass
+                try:
+                    backup_1 = self._path.with_name(f"{self._path.name}.1")
+                    if self._path.exists():
+                        self._path.rename(backup_1)
+                except Exception:
+                    pass
+                self._fh = open(self._path, "w", encoding="utf-8", buffering=1)
+                self._size = 0
+
+        self._log_fh = _RotatingLogFile(LOG_FILE, MAX_LOG_SIZE, BACKUP_COUNT)
+
+        # 2. Tee 流: 同时写轮转日志文件和原始 stdout/stderr (开发模式下终端可见)
         class _TeeStream(io.TextIOBase):
             def __init__(self, file_stream, original):
                 self._f = file_stream
@@ -224,7 +297,6 @@ class ServerController:
             def write(self, s: str) -> int:
                 if s:
                     self._f.write(s)
-                    self._f.flush()
                     if self._orig and not self._orig.closed:
                         try:
                             self._orig.write(s)
@@ -236,11 +308,11 @@ class ServerController:
             def flush(self):
                 self._f.flush()
 
-        # 3. 重定向 sys.stdout / sys.stderr，捕获所有 print() 调用
+        # 3. 重定向 sys.stdout / sys.stderr, 捕获所有输出
         sys.stdout = _TeeStream(self._log_fh, sys.__stdout__)
         sys.stderr = _TeeStream(self._log_fh, sys.__stderr__)
 
-        # 4. logging 模块同样写入同一文件
+        # 4. logging 模块: 临时 handler (main.py setup_logging 会替换)
         handler = logging.FileHandler(LOG_FILE, mode="a", encoding="utf-8")
         handler.setLevel(logging.INFO)
         handler.setFormatter(
@@ -254,12 +326,12 @@ class ServerController:
         for h in root.handlers[:]:
             root.removeHandler(h)
         root.addHandler(handler)
+        # uvicorn 日志统一走 root, 不再单独 addHandler
         for name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
             lg = logging.getLogger(name)
             lg.setLevel(logging.INFO)
             lg.handlers = []
-            lg.addHandler(handler)
-            lg.propagate = False
+            lg.propagate = True
 
     def _start_in_thread(self) -> str:
         """在守护线程中启动 uvicorn。"""
@@ -285,7 +357,10 @@ class ServerController:
             import traceback
             return f"无法加载 FastAPI 应用: {exc}\n{traceback.format_exc()}"
 
-        # [FIX] 明确 use_colors=False，避免 frozen exe 下 isatty() crash
+        # [FIX] uvicorn 日志统一走 root logger, 使用统一格式输出
+        # uvicorn/uvicorn.access 设置 propagate=True, 不再使用独立 handler
+        # 这样所有日志在 server.log 中格式一致:
+        # "2026-02-28 00:15:28 | INFO | uvicorn.access | 127.0.0.1 - GET /api/... 200"
         log_config = {
             "version": 1,
             "disable_existing_loggers": False,
@@ -295,20 +370,14 @@ class ServerController:
                     "fmt": "%(levelprefix)s %(message)s",
                     "use_colors": False,
                 },
-                "access": {
-                    "()": "uvicorn.logging.AccessFormatter",
-                    "fmt": '%(levelprefix)s %(client_addr)s - "%(request_line)s" %(status_code)s',
-                    "use_colors": False,
-                },
             },
             "handlers": {
                 "default": {"formatter": "default", "class": "logging.StreamHandler", "stream": "ext://sys.stderr"},
-                "access": {"formatter": "access", "class": "logging.StreamHandler", "stream": "ext://sys.stdout"},
             },
             "loggers": {
                 "uvicorn": {"handlers": ["default"], "level": "INFO", "propagate": False},
                 "uvicorn.error": {"level": "INFO"},
-                "uvicorn.access": {"handlers": ["access"], "level": "INFO", "propagate": False},
+                "uvicorn.access": {"handlers": [], "level": "INFO", "propagate": True},
             },
         }
 
@@ -354,12 +423,15 @@ class ServerController:
     def _release(self) -> None:
         self._server_thread = None
         self._uvicorn_server = None
-        # 恢复原始 stdout/stderr，关闭日志文件句柄
+        # 恢复原始 stdout/stderr, 关闭日志文件句柄
         try:
             if sys.stdout is not sys.__stdout__:
                 sys.stdout = sys.__stdout__
             if sys.stderr is not sys.__stderr__:
                 sys.stderr = sys.__stderr__
+        except Exception:
+            pass
+        try:
             if hasattr(self, '_log_fh') and self._log_fh:
                 self._log_fh.close()
                 self._log_fh = None
@@ -532,6 +604,9 @@ class TrayApp(QSystemTrayIcon):
         self._last_running: Optional[bool] = None
         self._action_start: Optional[QAction] = None
         self._action_stop: Optional[QAction] = None
+        self._auto_restart_count = 0  # 自动重启计数器
+        self._user_stopped = False    # 甮止用户主动停止后自动重启
+        self._max_auto_restart = 10   # 最大自动重启次数
 
         self.setToolTip(APP_TITLE)
         self._update_icon()
@@ -629,6 +704,10 @@ class TrayApp(QSystemTrayIcon):
             self._update_icon()
             self._refresh_menu()
 
+            # [WATCHDOG] 服务从运行变为停止，且不是用户主动停止的 -> 意外崩溃
+            if self._last_running is True and not running and not self._user_stopped:
+                self._handle_unexpected_death()
+
     def _on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.DoubleClick:
             self._on_log()
@@ -637,12 +716,14 @@ class TrayApp(QSystemTrayIcon):
         self.showMessage(APP_TITLE, self.controller.status_text(), QSystemTrayIcon.Information, 5000)
 
     def _on_start(self) -> None:
+        self._user_stopped = False  # 重置标记
         msg = self.controller.start()
         self.showMessage(APP_TITLE, msg, QSystemTrayIcon.Information, 4000)
         self._update_icon()
         self._refresh_menu()
 
     def _on_stop(self) -> None:
+        self._user_stopped = True  # 标记为用户主动停止
         msg = self.controller.stop()
         self.showMessage(APP_TITLE, msg, QSystemTrayIcon.Information, 4000)
         self._update_icon()
@@ -675,10 +756,49 @@ class TrayApp(QSystemTrayIcon):
         )
         if reply != QMessageBox.Yes:
             return
+        self._user_stopped = True  # 防止退出时触发 watchdog
         if self._log_window:
             self._log_window.close()
         self.controller.stop()
         QApplication.instance().quit()
+
+    # ---------- Watchdog: 自动重启 ----------
+
+    def _handle_unexpected_death(self) -> None:
+        """[WATCHDOG] 检测到服务意外死亡，自动重启"""
+        self._auto_restart_count += 1
+        import logging
+        _logger = logging.getLogger(__name__)
+
+        if self._auto_restart_count > self._max_auto_restart:
+            msg = f"[WATCHDOG] 服务已崩溃 {self._auto_restart_count} 次，停止自动重启"
+            _logger.error(msg)
+            self.showMessage(APP_TITLE, msg, QSystemTrayIcon.Critical, 10000)
+            return
+
+        msg = f"[WATCHDOG] 服务意外停止, 第 {self._auto_restart_count} 次自动重启..."
+        _logger.warning(msg)
+        self.showMessage(APP_TITLE, msg, QSystemTrayIcon.Warning, 5000)
+
+        # 延迟 3 秒后重启，避免快速循环崩溃
+        QTimer.singleShot(3000, self._do_auto_restart)
+
+    def _do_auto_restart(self) -> None:
+        """[WATCHDOG] 执行自动重启"""
+        import logging
+        _logger = logging.getLogger(__name__)
+
+        restart_msg = self.controller.start()
+        _logger.info(f"[WATCHDOG] 重启结果: {restart_msg}")
+
+        if self.controller.is_running:
+            self._auto_restart_count = 0  # 重启成功，重置计数器
+            self.showMessage(APP_TITLE, f"[WATCHDOG] 服务已自动恢复: {restart_msg}", QSystemTrayIcon.Information, 5000)
+        else:
+            self.showMessage(APP_TITLE, f"[WATCHDOG] 重启失败: {restart_msg}", QSystemTrayIcon.Critical, 5000)
+
+        self._update_icon()
+        self._refresh_menu()
 
 
 # ============================================================

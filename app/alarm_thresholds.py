@@ -33,56 +33,62 @@ class AlarmThresholds:
     # --------------------------------------------------------
     # 回转窑温度 x9  (short_hopper x4, no_hopper x2, long_hopper x3)
     # --------------------------------------------------------
-    rotary_temp_short_hopper_1: ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_short_hopper_2: ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_short_hopper_3: ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_short_hopper_4: ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_no_hopper_1:    ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_no_hopper_2:    ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_long_hopper_1:  ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_long_hopper_2:  ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
-    rotary_temp_long_hopper_3:  ThresholdConfig = field(default_factory=lambda: _tc(900, 1100))
+    rotary_temp_short_hopper_1: ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_short_hopper_2: ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_short_hopper_3: ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_short_hopper_4: ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_no_hopper_1:    ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_no_hopper_2:    ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_long_hopper_1:  ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_long_hopper_2:  ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
+    rotary_temp_long_hopper_3:  ThresholdConfig = field(default_factory=lambda: _tc(1000, 1400))
 
     # --------------------------------------------------------
     # 回转窑功率 x9
+    # warning_max=10kW (UI 绿->黄切换点，同时作为运行状态判断阈值)
+    # alarm_max=50kW   (UI 黄->红切换点，触发后端报警记录)
     # --------------------------------------------------------
-    rotary_power_short_hopper_1: ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_short_hopper_2: ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_short_hopper_3: ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_short_hopper_4: ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_no_hopper_1:    ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_no_hopper_2:    ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_long_hopper_1:  ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_long_hopper_2:  ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
-    rotary_power_long_hopper_3:  ThresholdConfig = field(default_factory=lambda: _tc(80, 100))
+    rotary_power_short_hopper_1: ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_short_hopper_2: ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_short_hopper_3: ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_short_hopper_4: ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_no_hopper_1:    ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_no_hopper_2:    ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_long_hopper_1:  ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_long_hopper_2:  ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
+    rotary_power_long_hopper_3:  ThresholdConfig = field(default_factory=lambda: _tc(10, 50))
 
     # --------------------------------------------------------
     # 辊道窑温度 x6
     # --------------------------------------------------------
-    roller_temp_zone1: ThresholdConfig = field(default_factory=lambda: _tc(1150, 1350))
-    roller_temp_zone2: ThresholdConfig = field(default_factory=lambda: _tc(1150, 1350))
-    roller_temp_zone3: ThresholdConfig = field(default_factory=lambda: _tc(1150, 1350))
-    roller_temp_zone4: ThresholdConfig = field(default_factory=lambda: _tc(1150, 1350))
-    roller_temp_zone5: ThresholdConfig = field(default_factory=lambda: _tc(1150, 1350))
-    roller_temp_zone6: ThresholdConfig = field(default_factory=lambda: _tc(1150, 1350))
+    roller_temp_zone1: ThresholdConfig = field(default_factory=lambda: _tc(800, 1000))
+    roller_temp_zone2: ThresholdConfig = field(default_factory=lambda: _tc(800, 1000))
+    roller_temp_zone3: ThresholdConfig = field(default_factory=lambda: _tc(800, 1000))
+    roller_temp_zone4: ThresholdConfig = field(default_factory=lambda: _tc(800, 1000))
+    roller_temp_zone5: ThresholdConfig = field(default_factory=lambda: _tc(800, 1000))
+    roller_temp_zone6: ThresholdConfig = field(default_factory=lambda: _tc(800, 1000))
 
     # --------------------------------------------------------
     # 风机功率 x2
+    # warning_max=0.6kW (运行状态判断阈值，绿->黄)
+    # alarm_max=1.0kW   (报警阈值，黄->红)
     # --------------------------------------------------------
-    fan_power_1: ThresholdConfig = field(default_factory=lambda: _tc(60, 80))
-    fan_power_2: ThresholdConfig = field(default_factory=lambda: _tc(60, 80))
+    fan_power_1: ThresholdConfig = field(default_factory=lambda: _tc(0.6, 1.0))
+    fan_power_2: ThresholdConfig = field(default_factory=lambda: _tc(0.6, 1.0))
 
     # --------------------------------------------------------
     # SCR 氨水泵功率 x2
+    # warning_max=0.05kW (运行状态判断阈值，绿->黄)
+    # alarm_max=0.1kW    (报警阈值，黄->红)
     # --------------------------------------------------------
-    scr_power_1: ThresholdConfig = field(default_factory=lambda: _tc(30, 50))
-    scr_power_2: ThresholdConfig = field(default_factory=lambda: _tc(30, 50))
+    scr_power_1: ThresholdConfig = field(default_factory=lambda: _tc(0.05, 0.1))
+    scr_power_2: ThresholdConfig = field(default_factory=lambda: _tc(0.05, 0.1))
 
     # --------------------------------------------------------
     # SCR 燃气表流量 x2
     # --------------------------------------------------------
-    scr_gas_1: ThresholdConfig = field(default_factory=lambda: _tc(100, 150))
-    scr_gas_2: ThresholdConfig = field(default_factory=lambda: _tc(100, 150))
+    scr_gas_1: ThresholdConfig = field(default_factory=lambda: _tc(330, 400))
+    scr_gas_2: ThresholdConfig = field(default_factory=lambda: _tc(330, 400))
 
 
 class AlarmThresholdManager:
@@ -116,9 +122,9 @@ class AlarmThresholdManager:
                         alarm_max=cfg.get("alarm_max", 0),
                         enabled=cfg.get("enabled", True),
                     ))
-            logger.info("[AlarmThresh] 阈值配置加载完成，共 %d 个参数", len(raw))
+            logger.info("[AlarmThresh] 阈值配置加载完成, 共 %d 个参数", len(raw))
         except Exception as e:
-            logger.error("[AlarmThresh] 加载失败，使用默认值: %s", e)
+            logger.error("[AlarmThresh] 加载失败, 使用默认值: %s", e, exc_info=True)
 
     # --------------------------------------------------------
     # 2. 保存阈值配置
@@ -145,10 +151,10 @@ class AlarmThresholdManager:
                 out[k] = v
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(out, f, ensure_ascii=False, indent=2)
-            logger.info("[AlarmThresh] 阈值配置保存完成，更新 %d 个参数", updated)
+            logger.info("[AlarmThresh] 阈值配置保存完成, 更新 %d 个参数", updated)
             return True
         except Exception as e:
-            logger.error("[AlarmThresh] 保存失败: %s", e)
+            logger.error("[AlarmThresh] 保存失败: %s", e, exc_info=True)
             return False
 
     # --------------------------------------------------------

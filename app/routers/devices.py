@@ -8,9 +8,12 @@
 
 from fastapi import APIRouter, Path
 from typing import Dict, Any
+import logging
 
 from app.models.response import ApiResponse
 from app.services.history_query_service import get_history_service
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/devices", tags=["通用设备查询"])
 
@@ -120,7 +123,7 @@ async def get_db_devices_realtime(
                         **realtime_data
                     })
             except Exception as e:
-                print(f"[WARN]  查询 {device_id} 失败: {str(e)}")
+                logger.warning("[Devices] query %s failed: %s", device_id, e)
                 continue
         
         return ApiResponse.ok({
@@ -131,6 +134,7 @@ async def get_db_devices_realtime(
             "devices": devices_data
         })
     except Exception as e:
+        logger.error("[Devices] query DB devices realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -175,4 +179,5 @@ async def get_db_devices_list(
             "devices": device_list
         })
     except Exception as e:
+        logger.error("[Devices] query DB devices list failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")

@@ -11,8 +11,11 @@
 from fastapi import APIRouter, Query
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import logging
 
 from app.models.response import ApiResponse
+
+logger = logging.getLogger(__name__)
 from app.services.daily_summary_service import get_daily_summary_service
 
 router = APIRouter(prefix="/api/daily-summary", tags=["日汇总数据管理"])
@@ -75,6 +78,7 @@ async def calculate_daily_summary(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[DailySummary] calculate failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"计算失败: {str(e)}")
 
 
@@ -136,6 +140,7 @@ async def fill_missing_dates(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[DailySummary] fill missing dates failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"补全失败: {str(e)}")
 
 
@@ -183,6 +188,7 @@ async def get_available_dates():
         return ApiResponse.ok(result)
     
     except Exception as e:
+        logger.error("[DailySummary] query available dates failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -259,5 +265,6 @@ async def query_daily_summary(
     except ValueError as e:
         return ApiResponse.fail(f"参数错误: {str(e)}")
     except Exception as e:
+        logger.error("[DailySummary] query daily summary failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 

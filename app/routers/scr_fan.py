@@ -14,10 +14,13 @@
 from fastapi import APIRouter, Query, Path
 from typing import Optional
 from datetime import datetime, timedelta
+import logging
 
 from app.models.response import ApiResponse
 from app.core.unified_naming import parse_history_fields
 from app.services.history_query_service import get_history_service
+
+logger = logging.getLogger(__name__)
 from app.services.polling_service import (
     get_latest_data,
     get_latest_device_data,
@@ -97,6 +100,7 @@ async def get_all_scr_fan_realtime():
             }
         })
     except Exception as e:
+        logger.error("[SCR] batch query all SCR+fan failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
@@ -129,6 +133,7 @@ async def get_all_scr_realtime():
             "devices": devices_data
         })
     except Exception as e:
+        logger.error("[SCR] batch query SCR failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
@@ -163,6 +168,7 @@ async def get_scr_realtime(
             **data
         })
     except Exception as e:
+        logger.error("[SCR] query SCR realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -224,6 +230,7 @@ async def get_scr_history(
             "data": data
         })
     except Exception as e:
+        logger.error("[SCR] query SCR history failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -256,6 +263,7 @@ async def get_all_fans_realtime():
             "devices": devices_data
         })
     except Exception as e:
+        logger.error("[SCR] batch query fan failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"批量查询失败: {str(e)}")
 
 
@@ -291,6 +299,7 @@ async def get_fan_realtime(
             "source": "influxdb"
         })
     except Exception as e:
+        logger.error("[SCR] query fan realtime failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
 
 
@@ -345,4 +354,5 @@ async def get_fan_history(
             "data": data
         })
     except Exception as e:
+        logger.error("[SCR] query fan history failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")

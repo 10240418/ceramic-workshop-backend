@@ -1,0 +1,42 @@
+2026-02-27 13:20:05 | CRITICAL | app.core.crash_guard | [CRASH] 未捕获异常: KeyboardInterrupt: 
+Traceback (most recent call last):
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\scripts\tray_app.py", line 456, in _read_new_lines
+    def _read_new_lines(self) -> None:
+    
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\core\crash_guard.py", line 84, in handler
+    raise KeyboardInterrupt
+KeyboardInterrupt
+2026-02-27 13:20:05 | CRITICAL | app.core.crash_guard | [CRASH] 未捕获异常: KeyboardInterrupt: 
+Traceback (most recent call last):
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\scripts\tray_app.py", line 456, in _read_new_lines
+    def _read_new_lines(self) -> None:
+    
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\core\crash_guard.py", line 84, in handler
+    raise KeyboardInterrupt
+KeyboardInterrupt
+2026-02-27 13:20:07 | CRITICAL | app.core.crash_guard | [CRASH] 未捕获异常: KeyboardInterrupt: 
+Traceback (most recent call last):
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\scripts\tray_app.py", line 456, in _read_new_lines
+    def _read_new_lines(self) -> None:
+    
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\core\crash_guard.py", line 84, in handler
+    raise KeyboardInterrupt
+KeyboardInterrupt
+2026-02-27 13:20:07 | CRITICAL | app.core.crash_guard | [CRASH] 未捕获异常: KeyboardInterrupt: 
+Traceback (most recent call last):
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\scripts\tray_app.py", line 456, in _read_new_lines
+    def _read_new_lines(self) -> None:
+    
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\core\crash_guard.py", line 84, in handler
+    raise KeyboardInterrupt
+KeyboardInterrupt
+2026-02-27 16:52:45 | ERROR | app.services.ws_manager | [WS] realtime 推送任务异常: dictionary changed size during iteration
+Traceback (most recent call last):
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\services\ws_manager.py", line 211, in _push_realtime_loop
+    await self._push_realtime_data(timestamp)
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\services\ws_manager.py", line 258, in _push_realtime_data
+    await self.broadcast("realtime", message)
+  File "C:\Users\20216\Documents\GitHub\Clutch\ceramic-workshop-backend\app\services\ws_manager.py", line 124, in broadcast
+    for ws, channels in self.active_connections.items():
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: dictionary changed size during iteration

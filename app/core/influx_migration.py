@@ -9,11 +9,15 @@
 # 5. auto_migrate()                - 自动迁移（启动时调用）
 # ============================================================
 
+import logging
+import os
+from datetime import timedelta
+
 from influxdb_client import InfluxDBClient, BucketRetentionRules
 from influxdb_client.client.write_api import SYNCHRONOUS
 from typing import Dict, Any, List
-import os
-from datetime import timedelta
+
+logger = logging.getLogger(__name__)
 
 from app.core.influx_schema import (
     ALL_SCHEMAS,
@@ -75,7 +79,7 @@ class InfluxDBMigration:
                 except Exception:
                     pass
                 self.client = None
-            print(f"[ERROR] InfluxDB 连接失败: {e}")
+            logger.error("[Migration] InfluxDB 连接失败: %s", e, exc_info=True)
             return False
     
     def disconnect(self) -> None:
@@ -103,11 +107,11 @@ class InfluxDBMigration:
             existing_bucket = buckets_api.find_bucket_by_name(self.bucket)
             
             if existing_bucket:
-                print(f"  [OK] Bucket 已存在: {self.bucket} (永久保留)")
+                logger.info("[Migration] Bucket 已存在: %s (永久保留)", self.bucket)
                 return True
             
             # 创建新 Bucket（永久保留，无过期策略）
-            print(f"   创建 Bucket: {self.bucket} (永久保留)")
+            logger.info("[Migration] 创建 Bucket: %s (永久保留)", self.bucket)
             
             buckets_api.create_bucket(
                 bucket_name=self.bucket,
@@ -115,11 +119,11 @@ class InfluxDBMigration:
                 # 不设置 retention_rules 表示永久保留
             )
             
-            print(f"  [OK] Bucket 创建成功: {self.bucket} (永久保留)")
+            logger.info("[Migration] Bucket 创建成功: %s (永久保留)", self.bucket)
             return True
             
         except Exception as e:
-            print(f"  [ERROR] Bucket 创建失败: {e}")
+            logger.error("[Migration] Bucket 创建失败: %s", e, exc_info=True)
             return False
     
     # ------------------------------------------------------------
@@ -133,7 +137,7 @@ class InfluxDBMigration:
         Returns:
             bool: 是否成功
         """
-        print(f"    所有数据已配置为永久保留，无需创建额外保留策略")
+        logger.info("[Migration] 所有数据已配置为永久保留, 无需创建额外保留策略")
         return True
     
     # ------------------------------------------------------------
@@ -148,7 +152,7 @@ class InfluxDBMigration:
         Returns:
             bool: 是否成功
         """
-        print(f"    数据永久保留，暂不创建聚合任务")
+        logger.info("[Migration] 数据永久保留, 暂不创建聚合任务")
         return True
     
     # ------------------------------------------------------------
@@ -161,11 +165,11 @@ class InfluxDBMigration:
             bool: 是否验证通过
         """
         try:
-            print(f"   验证 Schema 定义...")
+            logger.info("[Migration] 验证 Schema 定义...")
             
             summary = get_schema_summary()
             total = summary['total_measurements']
-            print(f"    共定义 {total} 个 Measurements:")
+            logger.info("[Migration] 共定义 %s 个 Measurements", total)
             
             # 按分类显示
             categories = {
@@ -177,17 +181,17 @@ class InfluxDBMigration:
             }
             
             for category, measurement_names in categories.items():
-                print(f"\n    【{category}】")
+                logger.info("[Migration] [%s]", category)
                 for m in summary['measurements']:
                     if m['name'] in measurement_names:
                         tags_str = f"{m['tags_count']} tags" if m['tags_count'] > 0 else "无tags"
-                        print(f"      [OK] {m['name']:<25} | {m['fields_count']} fields, {tags_str}")
+                        logger.info("[Migration]   %s | %s fields, %s", m['name'], m['fields_count'], tags_str)
             
-            print(f"\n  [OK] Schema 验证通过 (共 {total} 个表)")
+            logger.info("[Migration] Schema 验证通过 (共 %s 个表)", total)
             return True
             
         except Exception as e:
-            print(f"  [ERROR] Schema 验证失败: {e}")
+            logger.error("[Migration] Schema 验证失败: %s", e, exc_info=True)
             return False
     
     # ------------------------------------------------------------
@@ -201,38 +205,38 @@ class InfluxDBMigration:
         Returns:
             bool: 迁移是否成功
         """
-        print("=" * 70)
-        print(" InfluxDB 自动迁移")
-        print("=" * 70)
+        logger.info("[Migration] " + "=" * 50)
+        logger.info("[Migration] InfluxDB 自动迁移")
+        logger.info("[Migration] " + "=" * 50)
         
         # 1. 连接
-        print("\n[1/5] 连接 InfluxDB...")
+        logger.info("[Migration] [1/5] 连接 InfluxDB...")
         if not self.connect():
             return False
-        print("  [OK] 连接成功")
+        logger.info("[Migration] 连接成功")
         
         # 2. 创建主 Bucket
-        print("\n[2/5] 检查并创建主 Bucket...")
+        logger.info("[Migration] [2/5] 检查并创建主 Bucket...")
         if not self.check_and_create_bucket():
             return False
         
         # 3. 创建保留策略 Bucket
-        print("\n[3/5] 创建保留策略...")
+        logger.info("[Migration] [3/5] 创建保留策略...")
         if not self.create_retention_policies():
-            print("  [WARN]  保留策略创建失败，使用默认策略")
+            logger.warning("[Migration] 保留策略创建失败, 使用默认策略")
         
         # 4. 创建连续查询（可选）
-        print("\n[4/5] 创建连续查询...")
+        logger.info("[Migration] [4/5] 创建连续查询...")
         self.create_continuous_queries()
         
         # 5. 验证 Schema
-        print("\n[5/5] 验证 Schema...")
+        logger.info("[Migration] [5/5] 验证 Schema...")
         if not self.verify_schema():
             return False
         
-        print("\n" + "=" * 70)
-        print("[OK] InfluxDB 迁移完成！")
-        print("=" * 70)
+        logger.info("[Migration] " + "=" * 50)
+        logger.info("[Migration] InfluxDB 迁移完成")
+        logger.info("[Migration] " + "=" * 50)
         
         self.disconnect()
         return True
@@ -253,7 +257,7 @@ def auto_migrate_on_startup() -> bool:
         migration = InfluxDBMigration()
         return migration.auto_migrate()
     except Exception as e:
-        print(f"[ERROR] InfluxDB 自动迁移失败: {e}")
+        logger.error("[Migration] InfluxDB 自动迁移失败: %s", e, exc_info=True)
         return False
 
 
