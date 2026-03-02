@@ -43,8 +43,8 @@ ENV/
 *.db
 *.sqlite
 
-# Logs
-*.log
+# Logs - 忽略整个 logs 目录
+logs/
 
 # OS files
 .DS_Store

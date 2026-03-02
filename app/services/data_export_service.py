@@ -32,8 +32,9 @@ settings = get_settings()
 # 单例实例
 _export_service_instance: Optional['DataExportService'] = None
 
-# 内存缓存 (完整天数据)
-_memory_cache: Dict[str, Any] = {}
+# 内存缓存 (完整天数据, 带 TTL)
+_memory_cache: Dict[str, Dict[str, Any]] = {}
+_CACHE_TTL_SECONDS = 1800  # 30分钟过期
 
 
 def format_datetime_without_microseconds(dt: datetime) -> Optional[str]:
@@ -56,7 +57,7 @@ class DataExportService:
         # [CRITICAL] 使用环境变量配置的 bucket
         self.bucket = settings.influx_bucket
         self.org = settings.influx_org
-        self.power_threshold = 0.01  # 功率阈值 (kW)
+        self.power_threshold = 1.0  # 功率阈值 (kW), 与 daily_summary_service 保持一致
     
     @property
     def client(self):
@@ -122,9 +123,14 @@ class DataExportService:
         results = {}
         
         for device_id in device_ids:
-            daily_records = []
+            # [Optimized] 使用 aggregateWindow 批量查询, 替代逐天循环
+            # 2次查询(first+last)替代 2*N 次查询
+            readings_by_day = self._batch_query_daily_first_last(
+                device_id, "total_flow", start_time, end_time,
+                module_tag="gas_meter"
+            )
             
-            # 按天分割时间段
+            daily_records = []
             current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             day_count = 0
             
@@ -132,24 +138,22 @@ class DataExportService:
                 day_count += 1
                 day_start = max(current_date, start_time)
                 day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
+                date_str = current_date.strftime("%Y-%m-%d")
                 
-                # 查询当天的起始读数和结束读数
-                start_reading = self._get_gas_reading_at_time(device_id, day_start)
-                end_reading = self._get_gas_reading_at_time(device_id, day_end)
+                # 从批量查询结果中获取首尾读数
+                start_reading, end_reading = readings_by_day.get(date_str, (None, None))
                 
-                # 计算消耗：
-                # [FIX] 修复：如果开始读数为None，使用0作为起始值
+                # 计算消耗
                 consumption = 0.0
                 if end_reading is not None:
                     start_value = start_reading if start_reading is not None else 0.0
                     consumption = round(end_reading - start_value, 2)
-                    # 确保消耗量不为负数
                     if consumption < 0:
                         consumption = round(end_reading, 2)
                 
                 daily_records.append({
                     "day": day_count,
-                    "date": current_date.strftime("%Y-%m-%d"),
+                    "date": date_str,
                     "start_time": self._format_timestamp(day_start),
                     "end_time": self._format_timestamp(day_end),
                     "start_reading": round(start_reading, 2) if start_reading is not None else None,
@@ -247,42 +251,50 @@ class DataExportService:
             "long_hopper_1", "long_hopper_2", "long_hopper_3"
         ]
         
+        # 对齐到 UTC 日边界, 确保 aggregateWindow 窗口完整
+        range_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        range_end = end_time.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
         hoppers = []
         
         for device_id in hopper_ids:
+            # [FIX] 使用 feeding_cumulative.feeding_total 的 spread(max-min) 计算每日投料增量
+            # 与新投料分析服务 (feeding_analysis_service v6.0) 保持一致
+            query = f'''
+            from(bucket: "{self.bucket}")
+                |> range(start: {range_start.isoformat()}, stop: {range_end.isoformat()})
+                |> filter(fn: (r) => r["_measurement"] == "feeding_cumulative")
+                |> filter(fn: (r) => r["device_id"] == "{device_id}")
+                |> filter(fn: (r) => r["_field"] == "feeding_total")
+                |> aggregateWindow(every: 1d, fn: spread, createEmpty: true, timeSrc: "_start")
+            '''
+            
+            # 按日期索引查询结果
+            daily_map = {}
+            try:
+                result = self.query_api.query(query)
+                for table in result:
+                    for record in table.records:
+                        ts = record.get_time()
+                        date_key = ts.strftime("%Y-%m-%d")
+                        val = record.get_value()
+                        daily_map[date_key] = val if val is not None else 0.0
+            except Exception as e:
+                logger.warning("[Export] 查询 %s 投料记录失败: %s", device_id, e, exc_info=True)
+            
+            # 构建每日记录
             daily_records = []
-            
-            # 按天分割时间段
-            current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-            
-            while current_date < end_time:
+            current_date = range_start
+            while current_date < range_end:
+                date_key = current_date.strftime("%Y-%m-%d")
                 day_start = max(current_date, start_time)
-                day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
+                day_end_candidate = current_date + timedelta(days=1) - timedelta(seconds=1)
+                day_end = min(day_end_candidate, end_time)
                 
-                # 查询当天该设备的投料记录
-                query = f'''
-                from(bucket: "{self.bucket}")
-                    |> range(start: {day_start.isoformat()}, stop: {day_end.isoformat()})
-                    |> filter(fn: (r) => r["_measurement"] == "feeding_records")
-                    |> filter(fn: (r) => r["device_id"] == "{device_id}")
-                    |> filter(fn: (r) => r["_field"] == "added_weight")
-                    |> sum()
-                '''
-                
-                feeding_amount = 0.0
-                
-                try:
-                    result = self.query_api.query(query)
-                    for table in result:
-                        for record in table.records:
-                            feeding_amount = record.get_value()
-                            break
-                
-                except Exception as e:
-                    logger.warning("[Export] 查询 %s 在 %s 的投料记录失败: %s", device_id, current_date.date(), e, exc_info=True)
+                feeding_amount = daily_map.get(date_key, 0.0)
                 
                 daily_records.append({
-                    "date": current_date.strftime("%Y-%m-%d"),
+                    "date": date_key,
                     "start_time": self._format_timestamp(day_start),
                     "end_time": self._format_timestamp(day_end),
                     "feeding_amount": round(feeding_amount, 2)
@@ -337,9 +349,15 @@ class DataExportService:
                 ]
             }
         """
-        daily_records = []
+        # [Optimized] 批量查询: 3次查询(first+last+runtime)替代 3*N 次逐天查询
+        readings_by_day = self._batch_query_daily_first_last(
+            device_id, "ImpEp", start_time, end_time
+        )
+        runtime_by_day = self._batch_query_daily_runtime(
+            device_id, start_time, end_time
+        )
         
-        # 按天分割时间段
+        daily_records = []
         current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
         day_count = 0
         
@@ -347,29 +365,23 @@ class DataExportService:
             day_count += 1
             day_start = max(current_date, start_time)
             day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
+            date_str = current_date.strftime("%Y-%m-%d")
             
-            # 查询当天的起始读数和结束读数
-            start_reading = self._get_electricity_reading_at_time(device_id, day_start)
-            end_reading = self._get_electricity_reading_at_time(device_id, day_end)
+            # 从批量查询结果获取首尾读数和运行时长
+            start_reading, end_reading = readings_by_day.get(date_str, (None, None))
+            runtime_hours = runtime_by_day.get(date_str, 0.0)
             
-            # 计算消耗：
-            # [FIX] 修复：如果开始读数为None，使用0作为起始值
+            # 计算消耗
             consumption = 0.0
             if end_reading is not None:
                 start_value = start_reading if start_reading is not None else 0.0
                 consumption = round(end_reading - start_value, 2)
-                # 确保消耗量不为负数
                 if consumption < 0:
                     consumption = round(end_reading, 2)
             
-            # 计算运行时长
-            runtime_hours = self._calculate_runtime_for_period(
-                device_id, day_start, day_end
-            )
-            
             daily_records.append({
                 "day": day_count,
-                "date": current_date.strftime("%Y-%m-%d"),
+                "date": date_str,
                 "start_time": self._format_timestamp(day_start),
                 "end_time": self._format_timestamp(day_end),
                 "start_reading": round(start_reading, 2) if start_reading is not None else None,
@@ -460,9 +472,18 @@ class DataExportService:
                 "daily_records": [...]
             }
         """
-        daily_records = []
+        # [Optimized] 批量查询: 3次查询替代 3*N 次逐天查询
+        module_tag = f"{zone_id}_meter"
+        readings_by_day = self._batch_query_daily_first_last(
+            "roller_kiln_1", "ImpEp", start_time, end_time,
+            module_tag=module_tag
+        )
+        runtime_by_day = self._batch_query_daily_runtime(
+            "roller_kiln_1", start_time, end_time,
+            module_tag=module_tag
+        )
         
-        # 按天分割时间段
+        daily_records = []
         current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
         day_count = 0
         
@@ -470,34 +491,23 @@ class DataExportService:
             day_count += 1
             day_start = max(current_date, start_time)
             day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
+            date_str = current_date.strftime("%Y-%m-%d")
             
-            # 查询当天的起始读数和结束读数（使用 module_tag）
-            module_tag = f"{zone_id}_meter"
-            start_reading = self._get_electricity_reading_at_time(
-                "roller_kiln_1", day_start, module_tag=module_tag
-            )
-            end_reading = self._get_electricity_reading_at_time(
-                "roller_kiln_1", day_end, module_tag=module_tag
-            )
+            # 从批量查询结果获取首尾读数和运行时长
+            start_reading, end_reading = readings_by_day.get(date_str, (None, None))
+            runtime_hours = runtime_by_day.get(date_str, 0.0)
             
             # 计算消耗
-            # [FIX] 修复：如果开始读数为None，使用0作为起始值
             consumption = 0.0
             if end_reading is not None:
                 start_value = start_reading if start_reading is not None else 0.0
                 consumption = round(end_reading - start_value, 2)
-                # 确保消耗量不为负数
                 if consumption < 0:
                     consumption = round(end_reading, 2)
             
-            # 计算运行时长
-            runtime_hours = self._calculate_runtime_for_period(
-                "roller_kiln_1", day_start, day_end, module_tag=module_tag
-            )
-            
             daily_records.append({
                 "day": day_count,
-                "date": current_date.strftime("%Y-%m-%d"),
+                "date": date_str,
                 "start_time": self._format_timestamp(day_start),
                 "end_time": self._format_timestamp(day_end),
                 "start_reading": round(start_reading, 2) if start_reading is not None else None,
@@ -619,6 +629,165 @@ class DataExportService:
             logger.warning("[Export] 计算 %s 燃气表运行时长失败: %s", device_id, e, exc_info=True)
             return 0.0
     
+    # ------------------------------------------------------------
+    # [Optimized] 批量查询辅助方法 (aggregateWindow 替代逐天循环)
+    # ------------------------------------------------------------
+    # 优化原理:
+    # - 原方案: N天 x M设备 = N*M 次 InfluxDB 查询
+    # - 新方案: M设备 x 1次查询 = M 次查询 (每设备用 aggregateWindow 一次拿全部天)
+    # - 30天x20设备: 2500+ 次 -> 80 次, 减少 97%
+    # ------------------------------------------------------------
+    
+    def _batch_query_daily_runtime(
+        self,
+        device_id: str,
+        start_time: datetime,
+        end_time: datetime,
+        field: str = "Pt",
+        threshold: float = None,
+        module_tag: Optional[str] = None,
+    ) -> Dict[str, float]:
+        """[Optimized] 使用 aggregateWindow(1d, count) 批量查询每日运行时长
+        
+        单次查询替代逐天循环, 性能提升 N 倍 (N = 天数)
+        
+        Args:
+            device_id: 设备ID
+            start_time: 开始时间 (UTC)
+            end_time: 结束时间 (UTC)
+            field: 判断运行的字段 (默认 "Pt")
+            threshold: 运行阈值 (默认使用 self.power_threshold)
+            module_tag: 模块标签 (可选, 用于辊道窑分区等)
+            
+        Returns:
+            {日期字符串: 运行时长小时} 如 {"2026-01-26": 18.5, "2026-01-27": 20.2}
+        """
+        if threshold is None:
+            threshold = self.power_threshold
+        
+        # 对齐到 UTC 日边界, 确保 aggregateWindow 窗口完整
+        range_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        range_end = end_time.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
+        module_filter = ""
+        if module_tag:
+            module_filter = f'|> filter(fn: (r) => r["module_tag"] == "{module_tag}")'
+        
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {range_start.isoformat()}, stop: {range_end.isoformat()})
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            {module_filter}
+            |> filter(fn: (r) => r["_field"] == "{field}")
+            |> filter(fn: (r) => r["_value"] > {threshold})
+            |> aggregateWindow(every: 1d, fn: count, createEmpty: true, timeSrc: "_start")
+        '''
+        
+        result_map = {}
+        try:
+            result = self.query_api.query(query)
+            for table in result:
+                for record in table.records:
+                    ts = record.get_time()
+                    date_str = ts.strftime("%Y-%m-%d")
+                    count = record.get_value() or 0
+                    # 采样间隔 6 秒
+                    runtime_hours = round((count * 6) / 3600.0, 2)
+                    result_map[date_str] = runtime_hours
+            
+            logger.debug(
+                "[Export] 批量运行时长: device=%s, field=%s, days=%s",
+                device_id, field, len(result_map)
+            )
+        except Exception as e:
+            logger.warning(
+                "[Export] 批量查询运行时长失败 (%s): %s", device_id, e, exc_info=True
+            )
+        
+        return result_map
+    
+    def _batch_query_daily_first_last(
+        self,
+        device_id: str,
+        field: str,
+        start_time: datetime,
+        end_time: datetime,
+        module_tag: Optional[str] = None,
+    ) -> Dict[str, Tuple[Optional[float], Optional[float]]]:
+        """[Optimized] 使用 aggregateWindow(first/last) 批量查询每日首尾读数
+        
+        2次查询替代 2*N 次逐天查询, 性能提升 N 倍
+        适用于: ImpEp(电量), total_flow(燃气) 等累计值字段
+        
+        Args:
+            device_id: 设备ID
+            field: 字段名 (ImpEp, total_flow 等)
+            start_time: 开始时间 (UTC)
+            end_time: 结束时间 (UTC)
+            module_tag: 模块标签 (可选)
+            
+        Returns:
+            {日期字符串: (首值, 尾值)} 如 {"2026-01-26": (1234.5, 1456.7)}
+        """
+        range_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        range_end = end_time.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+        
+        module_filter = ""
+        if module_tag:
+            module_filter = f'|> filter(fn: (r) => r["module_tag"] == "{module_tag}")'
+        
+        base_query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {range_start.isoformat()}, stop: {range_end.isoformat()})
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            {module_filter}
+            |> filter(fn: (r) => r["_field"] == "{field}")
+        '''
+        
+        first_query = base_query + '|> aggregateWindow(every: 1d, fn: first, createEmpty: false, timeSrc: "_start")'
+        last_query = base_query + '|> aggregateWindow(every: 1d, fn: last, createEmpty: false, timeSrc: "_start")'
+        
+        first_map = {}
+        last_map = {}
+        
+        try:
+            # 查询每日首值
+            result = self.query_api.query(first_query)
+            for table in result:
+                for record in table.records:
+                    date_str = record.get_time().strftime("%Y-%m-%d")
+                    first_map[date_str] = record.get_value()
+            
+            # 查询每日尾值
+            result = self.query_api.query(last_query)
+            for table in result:
+                for record in table.records:
+                    date_str = record.get_time().strftime("%Y-%m-%d")
+                    last_map[date_str] = record.get_value()
+            
+            logger.debug(
+                "[Export] 批量首尾读数: device=%s, field=%s, days=%s",
+                device_id, field, len(first_map)
+            )
+        except Exception as e:
+            logger.warning(
+                "[Export] 批量查询首尾读数失败 (%s/%s): %s",
+                device_id, field, e, exc_info=True
+            )
+        
+        # 合并结果
+        all_dates = set(first_map.keys()) | set(last_map.keys())
+        result_map = {}
+        for date_str in all_dates:
+            result_map[date_str] = (
+                first_map.get(date_str),
+                last_map.get(date_str),
+            )
+        
+        return result_map
+    
     def _calculate_scr_pump_electricity_by_day(
         self,
         device_id: str,
@@ -642,9 +811,17 @@ class DataExportService:
                 "daily_records": [...]
             }
         """
-        daily_records = []
+        # [Optimized] 批量查询: 3次查询替代 3*N 次逐天查询
+        readings_by_day = self._batch_query_daily_first_last(
+            device_id, "ImpEp", start_time, end_time,
+            module_tag="meter"
+        )
+        runtime_by_day = self._batch_query_daily_runtime(
+            device_id, start_time, end_time,
+            module_tag="meter"
+        )
         
-        # 按天分割时间段
+        daily_records = []
         current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
         day_count = 0
         
@@ -652,14 +829,11 @@ class DataExportService:
             day_count += 1
             day_start = max(current_date, start_time)
             day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
+            date_str = current_date.strftime("%Y-%m-%d")
             
-            # 查询当天的起始读数和结束读数（使用 device_id=scr_1/scr_2 + module_tag=meter）
-            start_reading = self._get_electricity_reading_at_time(
-                device_id, day_start, module_tag="meter"
-            )
-            end_reading = self._get_electricity_reading_at_time(
-                device_id, day_end, module_tag="meter"
-            )
+            # 从批量查询结果获取首尾读数和运行时长
+            start_reading, end_reading = readings_by_day.get(date_str, (None, None))
+            runtime_hours = runtime_by_day.get(date_str, 0.0)
             
             # 计算消耗
             consumption = 0.0
@@ -669,14 +843,9 @@ class DataExportService:
                 if consumption < 0:
                     consumption = round(end_reading, 2)
             
-            # 计算运行时长（使用 device_id=scr_1/scr_2 + module_tag=meter）
-            runtime_hours = self._calculate_runtime_for_period(
-                device_id, day_start, day_end, module_tag="meter"
-            )
-            
             daily_records.append({
                 "day": day_count,
-                "date": current_date.strftime("%Y-%m-%d"),
+                "date": date_str,
                 "start_time": self._format_timestamp(day_start),
                 "end_time": self._format_timestamp(day_end),
                 "start_reading": round(start_reading, 2) if start_reading is not None else None,
@@ -872,7 +1041,7 @@ class DataExportService:
             "fan_devices": []
         }
         
-        # 1. 回转窑（料仓）- 只返回运行时长
+        # 1. 回转窑（料仓）- [Optimized] 每设备1次查询替代 N 次逐天查询
         hopper_ids = [
             "short_hopper_1", "short_hopper_2", "short_hopper_3", "short_hopper_4",
             "no_hopper_1", "no_hopper_2",
@@ -880,6 +1049,7 @@ class DataExportService:
         ]
         
         for hopper_id in hopper_ids:
+            runtime_by_day = self._batch_query_daily_runtime(hopper_id, start_time, end_time)
             daily_records = []
             current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             day_count = 0
@@ -888,20 +1058,15 @@ class DataExportService:
                 day_count += 1
                 day_start = max(current_date, start_time)
                 day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
-                
-                # 计算运行时长
-                runtime_hours = self._calculate_runtime_for_period(
-                    hopper_id, day_start, day_end
-                )
+                date_str = current_date.strftime("%Y-%m-%d")
                 
                 daily_records.append({
                     "day": day_count,
-                    "date": current_date.strftime("%Y-%m-%d"),
+                    "date": date_str,
                     "start_time": self._format_timestamp(day_start),
                     "end_time": self._format_timestamp(day_end),
-                    "runtime_hours": runtime_hours
+                    "runtime_hours": runtime_by_day.get(date_str, 0.0)
                 })
-                
                 current_date += timedelta(days=1)
             
             result["hoppers"].append({
@@ -911,32 +1076,30 @@ class DataExportService:
                 "daily_records": daily_records
             })
         
-        # 2. 辊道窑6个分区
+        # 2. 辊道窑6个分区 - [Optimized] 每温区1次查询
         zone_ids = ["zone1", "zone2", "zone3", "zone4", "zone5", "zone6"]
         for zone_id in zone_ids:
+            module_tag = f"{zone_id}_meter"
+            runtime_by_day = self._batch_query_daily_runtime(
+                "roller_kiln_1", start_time, end_time, module_tag=module_tag
+            )
             daily_records = []
             current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             day_count = 0
-            module_tag = f"{zone_id}_meter"
             
             while current_date < end_time:
                 day_count += 1
                 day_start = max(current_date, start_time)
                 day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
-                
-                # 计算运行时长（使用 module_tag）
-                runtime_hours = self._calculate_runtime_for_period(
-                    "roller_kiln_1", day_start, day_end, module_tag=module_tag
-                )
+                date_str = current_date.strftime("%Y-%m-%d")
                 
                 daily_records.append({
                     "day": day_count,
-                    "date": current_date.strftime("%Y-%m-%d"),
+                    "date": date_str,
                     "start_time": self._format_timestamp(day_start),
                     "end_time": self._format_timestamp(day_end),
-                    "runtime_hours": runtime_hours
+                    "runtime_hours": runtime_by_day.get(date_str, 0.0)
                 })
-                
                 current_date += timedelta(days=1)
             
             result["roller_kiln_zones"].append({
@@ -946,7 +1109,7 @@ class DataExportService:
                 "daily_records": daily_records
             })
         
-        # 3. 辊道窑合计（计算6个温区的平均运行时长）
+        # 3. 辊道窑合计（6个温区平均运行时长）
         zone_runtime_by_date = {}
         for zone_data in result["roller_kiln_zones"]:
             for record in zone_data["daily_records"]:
@@ -965,7 +1128,6 @@ class DataExportService:
             day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
             date = current_date.strftime("%Y-%m-%d")
             
-            # 计算平均运行时长
             avg_runtime = 0.0
             if date in zone_runtime_by_date and len(zone_runtime_by_date[date]) > 0:
                 avg_runtime = round(sum(zone_runtime_by_date[date]) / len(zone_runtime_by_date[date]), 2)
@@ -977,7 +1139,6 @@ class DataExportService:
                 "end_time": self._format_timestamp(day_end),
                 "runtime_hours": avg_runtime
             })
-            
             current_date += timedelta(days=1)
         
         result["roller_kiln_total"] = {
@@ -987,9 +1148,10 @@ class DataExportService:
             "daily_records": total_daily_records
         }
         
-        # 4. SCR设备（氨泵）
+        # 4. SCR设备（氨泵）- [Optimized] 每设备1次查询
         scr_ids = ["scr_1_pump", "scr_2_pump"]
         for scr_id in scr_ids:
+            runtime_by_day = self._batch_query_daily_runtime(scr_id, start_time, end_time)
             daily_records = []
             current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             day_count = 0
@@ -998,20 +1160,15 @@ class DataExportService:
                 day_count += 1
                 day_start = max(current_date, start_time)
                 day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
-                
-                # 计算运行时长
-                runtime_hours = self._calculate_runtime_for_period(
-                    scr_id, day_start, day_end
-                )
+                date_str = current_date.strftime("%Y-%m-%d")
                 
                 daily_records.append({
                     "day": day_count,
-                    "date": current_date.strftime("%Y-%m-%d"),
+                    "date": date_str,
                     "start_time": self._format_timestamp(day_start),
                     "end_time": self._format_timestamp(day_end),
-                    "runtime_hours": runtime_hours
+                    "runtime_hours": runtime_by_day.get(date_str, 0.0)
                 })
-                
                 current_date += timedelta(days=1)
             
             result["scr_devices"].append({
@@ -1021,9 +1178,10 @@ class DataExportService:
                 "daily_records": daily_records
             })
         
-        # 5. 风机
+        # 5. 风机 - [Optimized] 每设备1次查询
         fan_ids = ["fan_1", "fan_2"]
         for fan_id in fan_ids:
+            runtime_by_day = self._batch_query_daily_runtime(fan_id, start_time, end_time)
             daily_records = []
             current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             day_count = 0
@@ -1032,20 +1190,15 @@ class DataExportService:
                 day_count += 1
                 day_start = max(current_date, start_time)
                 day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
-                
-                # 计算运行时长
-                runtime_hours = self._calculate_runtime_for_period(
-                    fan_id, day_start, day_end
-                )
+                date_str = current_date.strftime("%Y-%m-%d")
                 
                 daily_records.append({
                     "day": day_count,
-                    "date": current_date.strftime("%Y-%m-%d"),
+                    "date": date_str,
                     "start_time": self._format_timestamp(day_start),
                     "end_time": self._format_timestamp(day_end),
-                    "runtime_hours": runtime_hours
+                    "runtime_hours": runtime_by_day.get(date_str, 0.0)
                 })
-                
                 current_date += timedelta(days=1)
             
             result["fan_devices"].append({
@@ -1239,20 +1392,23 @@ class DataExportService:
                 for record in gas_data[scr_id]["daily_records"]:
                     gas_records_map[record["date"]] = record["consumption"]
             
-            # 构建每日记录（有燃气消耗和运行时长）
-            daily_records = []
+            # [Optimized] 批量查询每日燃气运行时长 (替代逐天循环)
+            runtime_map = self._batch_query_daily_runtime(
+                device_id=scr_id,
+                start_time=start_time,
+                end_time=end_time,
+                field="flow_rate",
+                threshold=0.01,
+                module_tag="gas_meter"
+            )
             
-            # 按天分割时间段
+            # 构建每日记录
+            daily_records = []
             current_date = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
             while current_date < end_time:
                 date = current_date.strftime("%Y-%m-%d")
                 day_start = max(current_date, start_time)
                 day_end = min(current_date + timedelta(days=1) - timedelta(seconds=1), end_time)
-                
-                # 计算运行时长（基于燃气流量 > 0.01 m³/h）
-                runtime_hours = self._calculate_gas_meter_runtime(
-                    scr_id, day_start, day_end
-                )
                 
                 daily_records.append({
                     "date": date,
@@ -1260,8 +1416,8 @@ class DataExportService:
                     "end_time": self._format_timestamp(day_end),
                     "gas_consumption": gas_records_map.get(date, 0.0),
                     "feeding_amount": 0.0,
-                    "electricity_consumption": 0.0,  # 燃气表没有电量数据
-                    "runtime_hours": runtime_hours  # 根据燃气流量计算运行时长
+                    "electricity_consumption": 0.0,
+                    "runtime_hours": runtime_map.get(date, 0.0)
                 })
                 
                 current_date += timedelta(days=1)
@@ -1568,14 +1724,15 @@ class DataExportService:
             }
         
         elif metric_type == "feeding":
-            # 投料量保持原逻辑（device_id 一致）
+            # [FIX] 使用 feeding_cumulative.feeding_total 的 spread(max-min) 计算投料增量
+            # 与新投料分析服务 (feeding_analysis_service v6.0) 保持一致
             query = f'''
             from(bucket: "{self.bucket}")
                 |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
-                |> filter(fn: (r) => r["_measurement"] == "feeding_records")
+                |> filter(fn: (r) => r["_measurement"] == "feeding_cumulative")
                 |> filter(fn: (r) => r["device_id"] == "{actual_device_id}")
-                |> filter(fn: (r) => r["_field"] == "added_weight")
-                |> sum()
+                |> filter(fn: (r) => r["_field"] == "feeding_total")
+                |> spread()
             '''
             
             feeding_amount = 0.0
@@ -1583,7 +1740,9 @@ class DataExportService:
                 result = self.query_api.query(query)
                 for table in result:
                     for record in table.records:
-                        feeding_amount = record.get_value()
+                        val = record.get_value()
+                        if val is not None:
+                            feeding_amount = abs(float(val))
                         break
             except Exception as e:
                 logger.warning("[Export] 查询投料量失败: %s", e, exc_info=True)
@@ -1727,7 +1886,7 @@ class DataExportService:
                 |> filter(fn: (r) => r["device_id"] == "{device_id}")
                 |> filter(fn: (r) => r["module_tag"] == "{module_tag_filter}")
                 |> filter(fn: (r) => r["_field"] == "Pt")
-                |> filter(fn: (r) => r["_value"] > 0.01)
+                |> filter(fn: (r) => r["_value"] > {self.power_threshold})
                 |> count()
             '''
         else:
@@ -1759,12 +1918,23 @@ class DataExportService:
         return hashlib.md5(key_str.encode()).hexdigest()
     
     def _get_from_cache(self, cache_key: str) -> Optional[Dict[str, Any]]:
-        """从缓存获取数据"""
-        return _memory_cache.get(cache_key)
+        """从缓存获取数据 (检查 TTL)"""
+        entry = _memory_cache.get(cache_key)
+        if entry is None:
+            return None
+        # 检查是否过期
+        cached_time = entry.get("_cached_at", 0)
+        if (datetime.now(timezone.utc).timestamp() - cached_time) > _CACHE_TTL_SECONDS:
+            del _memory_cache[cache_key]
+            return None
+        return entry.get("data")
     
     def _set_to_cache(self, cache_key: str, data: Dict[str, Any]):
-        """存入缓存"""
-        _memory_cache[cache_key] = data
+        """存入缓存 (带时间戳)"""
+        _memory_cache[cache_key] = {
+            "data": data,
+            "_cached_at": datetime.now(timezone.utc).timestamp()
+        }
         
         # 限制缓存大小（最多保留 100 个条目）
         if len(_memory_cache) > 100:
@@ -1817,7 +1987,7 @@ class DataExportService:
             end_date = datetime.strptime(full_day_slices[-1].date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
             
             # 确保数据已补全
-            self._get_summary_service().check_and_fill_missing_dates(end_date=end_date)
+            self._get_summary_service().check_and_fill_missing_dates(end_dt=end_date)
             
             # 批量查询
             precomputed_data = self._batch_query_daily_summary(start_date, end_date)
@@ -2201,7 +2371,7 @@ class DataExportService:
             end_date = datetime.strptime(full_day_slices[-1].date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
             
             # 确保数据已补全
-            self._get_summary_service().check_and_fill_missing_dates(end_date=end_date)
+            self._get_summary_service().check_and_fill_missing_dates(end_dt=end_date)
             
             # 批量查询
             precomputed_data = self._batch_query_daily_summary(start_date, end_date)
@@ -2309,18 +2479,9 @@ class DataExportService:
 # ------------------------------------------------------------
 # 单例获取函数
 # ------------------------------------------------------------
-
-
-# ------------------------------------------------------------
-# 单例获取函数
-# ------------------------------------------------------------
 def get_export_service() -> DataExportService:
     """获取数据导出服务单例"""
     global _export_service_instance
     if _export_service_instance is None:
         _export_service_instance = DataExportService()
     return _export_service_instance
-
-
-# [FIX] 兼容旧导入名称
-get_export_service_v3 = get_export_service

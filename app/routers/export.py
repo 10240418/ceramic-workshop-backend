@@ -29,7 +29,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
 from app.models.response import ApiResponse
-from app.services.data_export_service import get_export_service, get_export_service_v3
+from app.services.data_export_service import get_export_service
 from app.tools.time_slice_tools import parse_days_parameter
 
 router = APIRouter(prefix="/api/export", tags=["数据导出统计"])
@@ -39,7 +39,7 @@ router = APIRouter(prefix="/api/export", tags=["数据导出统计"])
 # 1. GET /api/export/runtime/all - 所有设备设备运行时长（按天）
 # ============================================================
 @router.get("/runtime/all")
-async def export_all_runtime(
+def export_all_runtime(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
     days: Optional[int] = Query(7, description="查询最近N天（如果未指定start_time和end_time）"),
@@ -48,7 +48,7 @@ async def export_all_runtime(
     """导出所有设备设备运行时长（按天）
     
     **功能说明**:
-    - 统计所有设备的运行时长（基于功率 > 0.01kW 判断）
+    - 统计所有设备的运行时长（基于功率 > 1.0kW 判断）
     - 按天返回：起始时间、终止时间、当日运行时长
     - 一次性获取所有设备运行时长数据
     
@@ -120,7 +120,7 @@ async def export_all_runtime(
         # 选择服务版本
         if version == "v3":
             # V3: 优化版（使用预计算数据）
-            service = get_export_service_v3()
+            service = get_export_service()
             result = service.export_runtime_v3(
                 start_time=start_dt,
                 end_time=end_dt
@@ -146,7 +146,7 @@ async def export_all_runtime(
 # 2. GET /api/export/gas-consumption - 燃气消耗统计（按天）
 # ============================================================
 @router.get("/gas-consumption")
-async def export_gas_consumption(
+def export_gas_consumption(
     device_ids: Optional[str] = Query("scr_1,scr_2", description="设备ID列表（逗号分隔），如: scr_1,scr_2"),
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
@@ -224,7 +224,7 @@ async def export_gas_consumption(
         # 选择服务版本
         if version == "v3":
             # V3: 优化版（使用预计算数据）
-            service = get_export_service_v3()
+            service = get_export_service()
             result = service.export_gas_v3(
                 device_ids=device_id_list,
                 start_time=start_dt,
@@ -252,7 +252,7 @@ async def export_gas_consumption(
 # 3. GET /api/export/feeding-amount - 累计投料量（按天）
 # ============================================================
 @router.get("/feeding-amount")
-async def export_feeding_amount(
+def export_feeding_amount(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
     days: Optional[int] = Query(7, description="查询最近N天（如果未指定start_time和end_time）"),
@@ -322,7 +322,7 @@ async def export_feeding_amount(
         # 选择服务版本
         if version == "v3":
             # V3: 优化版（使用预计算数据）
-            service = get_export_service_v3()
+            service = get_export_service()
             result = service.export_feeding_v3(
                 start_time=start_dt,
                 end_time=end_dt
@@ -348,7 +348,7 @@ async def export_feeding_amount(
 # 4. GET /api/export/electricity/all - 所有设备电量统计（按天）
 # ============================================================
 @router.get("/electricity/all")
-async def export_all_electricity_consumption(
+def export_all_electricity_consumption(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
     days: Optional[int] = Query(7, description="查询最近N天（如果未指定start_time和end_time）"),
@@ -433,7 +433,7 @@ async def export_all_electricity_consumption(
         # 选择服务版本
         if version == "v3":
             # V3: 优化版（使用预计算数据）
-            service = get_export_service_v3()
+            service = get_export_service()
             result = service.export_electricity_v3(
                 start_time=start_dt,
                 end_time=end_dt
@@ -459,7 +459,7 @@ async def export_all_electricity_consumption(
 # 5. GET /api/export/comprehensive - 综合导出所有数据（按天）
 # ============================================================
 @router.get("/comprehensive")
-async def export_comprehensive_data(
+def export_comprehensive_data(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
     days: Optional[int] = Query(None, description="查询最近N天（如果未指定start_time和end_time）"),
@@ -583,7 +583,7 @@ async def export_comprehensive_data(
         # 选择服务版本
         if version == "v3":
             # V3: 优化版（批量查询 + 并行计算 + 内存缓存）
-            service = get_export_service_v3()
+            service = get_export_service()
             result = service.export_comprehensive_v3(
                 start_time=start_dt,
                 end_time=end_dt

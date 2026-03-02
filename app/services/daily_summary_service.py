@@ -401,6 +401,54 @@ class DailySummaryService:
 
         return (first_val, last_val)
 
+    def _calc_runtime_count(
+        self,
+        device_id: str,
+        day_start: datetime,
+        day_end: datetime,
+        field: str = "Pt",
+        threshold: float = RUNTIME_POWER_THRESHOLD,
+        extra_filter: str = "",
+    ) -> float:
+        """计算设备当天运行时长 (基于功率/流量阈值)
+
+        通过统计 field > threshold 的数据点数, 乘以采样间隔 (6s) 换算为小时
+
+        Args:
+            device_id:    设备ID (module_data 中的 device_id)
+            day_start:    当天起始时间 (UTC)
+            day_end:      当天结束时间 (UTC)
+            field:        判断运行的字段 (默认 "Pt")
+            threshold:    运行阈值 (默认 RUNTIME_POWER_THRESHOLD)
+            extra_filter: 额外 Flux 过滤条件 (如 sensor_type)
+
+        Returns:
+            运行时长 (小时), 如 18.5
+        """
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {day_start.isoformat()}, stop: {day_end.isoformat()})
+            |> filter(fn: (r) => r["_measurement"] == "module_data")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            |> filter(fn: (r) => r["_field"] == "{field}")
+            {extra_filter}
+            |> filter(fn: (r) => r["_value"] > {threshold})
+            |> count()
+        '''
+        try:
+            result = self.query_api.query(query)
+            count = 0
+            for table in result:
+                for record in table.records:
+                    count = record.get_value() or 0
+                    break
+                break
+            # 采样间隔 6 秒
+            return round((count * 6) / 3600.0, 2)
+        except Exception as e:
+            logger.warning("[DailySummary] 计算运行时长失败 (%s): %s", device_id, e)
+            return 0.0
+
     def _calc_electricity_point(
         self,
         device_id: str,
@@ -426,6 +474,13 @@ class DailySummaryService:
         # 处理仪表重置 (end < start)
         consumption = max(0.0, float(last_val) - float(first_val))
 
+        # 计算运行时长 (统计 Pt > 阈值的数据点)
+        runtime_hours = self._calc_runtime_count(
+            device_id=src_device_id,
+            day_start=day_start,
+            day_end=day_end,
+        )
+
         return build_point(
             measurement="daily_summary",
             tags={
@@ -438,7 +493,7 @@ class DailySummaryService:
                 "start_reading": float(first_val),
                 "end_reading":   float(last_val),
                 "consumption":   consumption,
-                "runtime_hours": 0.0,
+                "runtime_hours": runtime_hours,
                 "feeding_amount": 0.0,
                 "gas_consumption": 0.0,
             },
@@ -470,6 +525,14 @@ class DailySummaryService:
 
         consumption = max(0.0, float(last_val) - float(first_val))
 
+        # 计算运行时长 (通过 sensor_type 筛选对应温区)
+        runtime_hours = self._calc_runtime_count(
+            device_id="roller_kiln_1",
+            day_start=day_start,
+            day_end=day_end,
+            extra_filter=extra_filter,
+        )
+
         return build_point(
             measurement="daily_summary",
             tags={
@@ -482,7 +545,7 @@ class DailySummaryService:
                 "start_reading":  float(first_val),
                 "end_reading":    float(last_val),
                 "consumption":    consumption,
-                "runtime_hours":  0.0,
+                "runtime_hours":  runtime_hours,
                 "feeding_amount": 0.0,
                 "gas_consumption": 0.0,
             },
@@ -538,16 +601,18 @@ class DailySummaryService:
         day_start: datetime,
         day_end: datetime,
     ) -> Optional[Point]:
-        """计算投料量 Point (统计当天重量净减少量)"""
+        """计算投料量 Point (使用 feeding_cumulative.feeding_total 的 spread)
+        
+        数据来源: feeding_analysis_service v6.0 写入的 feeding_cumulative measurement
+        算法: spread(max - min) 得到当天投料总量的增量
+        """
         query = f'''
         from(bucket: "{self.bucket}")
             |> range(start: {day_start.isoformat()}, stop: {day_end.isoformat()})
-            |> filter(fn: (r) => r["_measurement"] == "module_data")
+            |> filter(fn: (r) => r["_measurement"] == "feeding_cumulative")
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
-            |> filter(fn: (r) => r["_field"] == "weight")
-            |> derivative(unit: 1s, nonNegative: false)
-            |> filter(fn: (r) => r["_value"] < 0.0)
-            |> sum()
+            |> filter(fn: (r) => r["_field"] == "feeding_total")
+            |> spread()
         '''
         try:
             result = self.query_api.query(query)
@@ -556,7 +621,7 @@ class DailySummaryService:
                 for record in table.records:
                     val = record.get_value()
                     if val is not None:
-                        total_decrease += abs(float(val))
+                        total_decrease = abs(float(val))
 
             if total_decrease <= 0.0:
                 return None
