@@ -411,12 +411,22 @@ async def _poll_realtime_data_loop():
                 if device.get('device_id') == 'roller_kiln_1':
                     aggregator = get_aggregator()
 
-                    total_point = aggregator.aggregate_zones(device, timestamp)
+                    # [FIX] 必须从已过 converter 的内存缓存读取数据来计算总表
+                    # 原因: parse_all() 的原始数据未经 ElectricityMeter converter 变比转换
+                    # (辊道窑变比=60, converter 对 Pt 做 *0.0001*60, 对 I 做 *0.001*60)
+                    # 直接用 device (原始数据) 会导致 total 与各分区单位不一致:
+                    # zone Pt(经converter) ≈ 0.0kW, total Pt(未经converter) = 6.0kW
+                    with _data_lock:
+                        converted_roller_device = _latest_data.get('roller_kiln_1')
+
+                    source_device = converted_roller_device if converted_roller_device else device
+
+                    total_point = aggregator.aggregate_zones(source_device, timestamp)
                     if total_point:
                         _point_buffer.append(total_point)
                         written_count += 1
 
-                    total_cache = aggregator.aggregate_zones_for_cache(device, timestamp)
+                    total_cache = aggregator.aggregate_zones_for_cache(source_device, timestamp)
                     if total_cache:
                         with _data_lock:
                             _latest_data['roller_kiln_total'] = total_cache

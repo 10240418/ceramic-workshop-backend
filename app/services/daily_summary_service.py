@@ -67,6 +67,16 @@ FAN_DEVICES = [
 # 最小运行功率阈值 (kW)，低于此值认为设备未运行
 RUNTIME_POWER_THRESHOLD = 1.0
 
+# 独立设备运行阈值 (kW) - 覆盖默认值
+# SCR 氨水泵: 36W = 0.036kW
+# 风机: 500W = 0.5kW
+DEVICE_RUNTIME_THRESHOLDS = {
+    "scr_1": 0.036,
+    "scr_2": 0.036,
+    "fan_1": 0.5,
+    "fan_2": 0.5,
+}
+
 
 class DailySummaryService:
     """日汇总数据计算与存储服务（单例模式）"""
@@ -475,10 +485,12 @@ class DailySummaryService:
         consumption = max(0.0, float(last_val) - float(first_val))
 
         # 计算运行时长 (统计 Pt > 阈值的数据点)
+        threshold = DEVICE_RUNTIME_THRESHOLDS.get(src_device_id, RUNTIME_POWER_THRESHOLD)
         runtime_hours = self._calc_runtime_count(
             device_id=src_device_id,
             day_start=day_start,
             day_end=day_end,
+            threshold=threshold,
         )
 
         return build_point(

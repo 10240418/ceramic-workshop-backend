@@ -57,7 +57,17 @@ class DataExportService:
         # [CRITICAL] 使用环境变量配置的 bucket
         self.bucket = settings.influx_bucket
         self.org = settings.influx_org
-        self.power_threshold = 1.0  # 功率阈值 (kW), 与 daily_summary_service 保持一致
+        self.power_threshold = 1.0  # 默认功率阈值 (kW)
+        # 独立设备运行阈值 (kW) - 覆盖默认值
+        # SCR 氨水泵: 36W = 0.036kW, 风机: 500W = 0.5kW
+        self._device_thresholds = {
+            "scr_1": 0.036,
+            "scr_2": 0.036,
+            "scr_1_pump": 0.036,
+            "scr_2_pump": 0.036,
+            "fan_1": 0.5,
+            "fan_2": 0.5,
+        }
     
     @property
     def client(self):
@@ -555,7 +565,7 @@ class DataExportService:
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
             {module_filter}
             |> filter(fn: (r) => r["_field"] == "Pt")
-            |> filter(fn: (r) => r["_value"] > {self.power_threshold})
+            |> filter(fn: (r) => r["_value"] > {self._get_power_threshold(device_id)})
             |> count()
         '''
         
@@ -579,6 +589,10 @@ class DataExportService:
         except Exception as e:
             logger.warning("[Export] 计算 %s 运行时长失败: %s", device_id, e, exc_info=True)
             return 0.0
+    
+    def _get_power_threshold(self, device_id: str) -> float:
+        """获取设备运行功率阈值 (kW)"""
+        return self._device_thresholds.get(device_id, self.power_threshold)
     
     def _calculate_gas_meter_runtime(
         self,
@@ -663,7 +677,7 @@ class DataExportService:
             {日期字符串: 运行时长小时} 如 {"2026-01-26": 18.5, "2026-01-27": 20.2}
         """
         if threshold is None:
-            threshold = self.power_threshold
+            threshold = self._get_power_threshold(device_id)
         
         # 对齐到 UTC 日边界, 确保 aggregateWindow 窗口完整
         range_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1886,7 +1900,7 @@ class DataExportService:
                 |> filter(fn: (r) => r["device_id"] == "{device_id}")
                 |> filter(fn: (r) => r["module_tag"] == "{module_tag_filter}")
                 |> filter(fn: (r) => r["_field"] == "Pt")
-                |> filter(fn: (r) => r["_value"] > {self.power_threshold})
+                |> filter(fn: (r) => r["_value"] > {self._get_power_threshold(device_id)})
                 |> count()
             '''
         else:
