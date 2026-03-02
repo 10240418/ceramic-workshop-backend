@@ -6,10 +6,10 @@
 # 
 # [FIX] 2026-01-10 更新计算公式 (根据实际PLC原始数据验证):
 # [FIX] 2026-01-20 功率系数调整: 原 0.001 → 0.0001 (×0.1)
-#   - 电压 Ua: raw × 0.1 (不乘变比)
-#   - 电流 I:  raw × 0.001 × ratio (料仓/风机=20, 辊道窑=60, SCR=20)
-#   - 功率 Pt: raw × 0.0001 × ratio
-#   - 能耗 ImpEp: raw × 2 (不乘变比，直接乘2)
+#   - 电压 Ua: raw x 0.1 (不乘变比) -> V
+#   - 电流 I:  raw x 0.001 x ratio (料仓/风机=20, 辊道窑=60, SCR=20) -> A
+#   - 功率 Pt: raw x 0.0001 x ratio -> kW
+#   - 能耗 ImpEp: raw x ratio -> kWh (乘变比, 不乘2)
 # ============================================================
 
 from typing import Dict, Any
@@ -29,10 +29,10 @@ class ElectricityConverter(BaseConverter):
         - ImpEp: 正向有功电能
     
     计算公式 (2026-01-20 更新):
-        - 电压: raw × 0.1 → 实际电压 (V)
-        - 电流: raw × 0.001 × ratio → 实际电流 (A)
-        - 功率: raw × 0.0001 × ratio → 实际功率 (kW)
-        - 能耗: raw × 2 → 实际能耗 (kWh)
+        - 电压: raw x 0.1 -> V
+        - 电流: raw x 0.001 x ratio -> A
+        - 功率: raw x 0.0001 x ratio -> kW
+        - 能耗: raw x ratio -> kWh
     
     电流互感器变比:
         - 辊道窑 (roller_kiln): ratio = 60
@@ -51,7 +51,7 @@ class ElectricityConverter(BaseConverter):
     SCALE_VOLTAGE = 0.1           # 电压: raw × 0.1
     SCALE_CURRENT = 0.001         # 电流: raw × 0.001 × ratio
     SCALE_POWER = 0.0001          # 功率: raw × 0.0001 × ratio (2026-01-20: 原0.001×0.1)
-    SCALE_ENERGY = 2.0            # 能耗: raw × 2 (不乘变比)
+    SCALE_ENERGY = 2.0            # (未使用, 实际能耗公式: raw x ratio)
     
     # 实时数据字段 (包含三相电流，用于API返回)
     REALTIME_FIELDS = {
@@ -91,10 +91,10 @@ class ElectricityConverter(BaseConverter):
             实时数据字段字典 (6个字段，包含三相电流)
         
         计算公式:
-            - 电压: raw × 0.1
-            - 电流: raw × 0.001 × ratio
-            - 功率: raw × 0.0001 × ratio
-            - 能耗: raw × 2
+            - 电压: raw x 0.1 -> V
+            - 电流: raw x 0.001 x ratio -> A
+            - 功率: raw x 0.0001 x ratio -> kW
+            - 能耗: raw x ratio -> kWh
         """
         # 判断电流变比: 优先级 is_scr > is_roller_kiln > default
         is_scr = kwargs.get('is_scr', False)
@@ -111,16 +111,16 @@ class ElectricityConverter(BaseConverter):
         current_ratio = kwargs.get('current_ratio', current_ratio)
         
         return {
-            # 功率: raw × 0.0001 × ratio (保留3位小数)
+            # 功率: raw x 0.0001 x ratio -> kW
             "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 3),
-            
-            # 能耗: raw × ratio (直接乘变比，不乘2)
+
+            # 能耗: raw x ratio -> kWh
             "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * current_ratio, 2),
-            
-            # A相电压: raw × 0.1 (不乘变比)
+
+            # A相电压: raw x 0.1 -> V
             "Ua_0": round(self.get_field_value(raw_data, "Ua_0", 0.0) * self.SCALE_VOLTAGE, 1),
-            
-            # 三相电流: raw × 0.001 × ratio
+
+            # 三相电流: raw x 0.001 x ratio -> A
             "I_0": round(self.get_field_value(raw_data, "I_0", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
             "I_1": round(self.get_field_value(raw_data, "I_1", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
             "I_2": round(self.get_field_value(raw_data, "I_2", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
@@ -155,16 +155,16 @@ class ElectricityConverter(BaseConverter):
         current_ratio = kwargs.get('current_ratio', current_ratio)
 
         return {
-            # 功率: raw × 0.0001 × ratio (保留3位小数)
+            # 功率: raw x 0.0001 x ratio -> kW
             "Pt": round(self.get_field_value(raw_data, "Pt", 0.0) * self.SCALE_POWER * current_ratio, 3),
 
-            # 能耗: raw × ratio (直接乘变比，不乘2)
+            # 能耗: raw x ratio -> kWh
             "ImpEp": round(self.get_field_value(raw_data, "ImpEp", 0.0) * current_ratio, 2),
 
-            # A相电压: raw × 0.1 (不乘变比)
+            # A相电压: raw x 0.1 -> V
             "Ua_0": round(self.get_field_value(raw_data, "Ua_0", 0.0) * self.SCALE_VOLTAGE, 1),
 
-            # 三相电流: raw × 0.001 × ratio
+            # 三相电流: raw x 0.001 x ratio -> A
             "I_0": round(self.get_field_value(raw_data, "I_0", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
             "I_1": round(self.get_field_value(raw_data, "I_1", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
             "I_2": round(self.get_field_value(raw_data, "I_2", 0.0) * self.SCALE_CURRENT * current_ratio, 2),
