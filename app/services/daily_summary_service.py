@@ -6,6 +6,8 @@
 # 2. check_and_fill_missing_dates()      - 检测并补全缺失的日期数据
 # 3. get_available_dates()               - 获取已有的日期列表
 # 4. get_daily_summary()                 - 查询日汇总数据
+# 5. _query_first_last_value()           - 查询首末值
+# 6. force_recalculate_range()           - 强制重算指定日期范围
 # ============================================================
 
 import logging
@@ -86,6 +88,10 @@ class DailySummaryService:
         self._query_api = None
         self.bucket = settings.influx_bucket
         self.org = settings.influx_org
+        # 从配置读取实际轮询间隔 (秒), 用于 count * interval 计算运行时长
+        self._polling_interval = settings.plc_poll_interval
+        # 移动平均窗口大小, 用于消除阈值边界抖动 (防抖)
+        self._smoothing_window = 3
 
     @property
     def client(self):
@@ -422,7 +428,7 @@ class DailySummaryService:
     ) -> float:
         """计算设备当天运行时长 (基于功率/流量阈值)
 
-        通过统计 field > threshold 的数据点数, 乘以采样间隔 (6s) 换算为小时
+        通过统计 field > threshold 的数据点数, 乘以采样间隔 (self._polling_interval) 换算为小时
 
         Args:
             device_id:    设备ID (module_data 中的 device_id)
@@ -442,6 +448,7 @@ class DailySummaryService:
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
             |> filter(fn: (r) => r["_field"] == "{field}")
             {extra_filter}
+            |> movingAverage(n: {self._smoothing_window})
             |> filter(fn: (r) => r["_value"] > {threshold})
             |> count()
         '''
@@ -453,8 +460,8 @@ class DailySummaryService:
                     count = record.get_value() or 0
                     break
                 break
-            # 采样间隔 6 秒
-            return round((count * 6) / 3600.0, 2)
+            # 轮询间隔从配置读取
+            return round((count * self._polling_interval) / 3600.0, 2)
         except Exception as e:
             logger.warning("[DailySummary] 计算运行时长失败 (%s): %s", device_id, e)
             return 0.0
@@ -659,6 +666,103 @@ class DailySummaryService:
         except Exception as e:
             logger.warning("[DailySummary] 计算投料量失败 (%s): %s", device_id, e)
             return None
+
+
+    # ------------------------------------------------------------
+    # 6. force_recalculate_range() - 强制重算指定日期范围的汇总数据
+    # ------------------------------------------------------------
+    def force_recalculate_range(
+        self,
+        start_date: str,
+        end_date: str,
+        polling_interval: float = None,
+    ) -> Dict[str, Any]:
+        """强制重算指定日期范围的日汇总数据
+
+        1. 删除 InfluxDB 中该日期范围的 daily_summary 记录
+        2. 临时覆盖 _polling_interval (如果指定)
+        3. 逐天调用 calculate_and_store_daily_summary 重新计算
+        4. 恢复原始 _polling_interval
+
+        Args:
+            start_date: 开始日期 (YYYY-MM-DD)
+            end_date:   结束日期 (YYYY-MM-DD)
+            polling_interval: 轮询间隔 (秒), 为 None 时使用配置值
+        """
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+        if start_dt > end_dt:
+            raise ValueError(f"start_date({start_date}) > end_date({end_date})")
+
+        # 计算需要重算的天数
+        total_days = (end_dt - start_dt).days + 1
+        logger.info(
+            "[DailySummary] 强制重算: %s ~ %s (%d天), polling_interval=%s",
+            start_date, end_date, total_days,
+            polling_interval if polling_interval else f"{self._polling_interval}(config)",
+        )
+
+        # 1) 删除旧记录: 范围 = [start_dt, end_dt+1d)
+        delete_start = start_dt
+        delete_stop = end_dt + timedelta(days=1)
+        predicate = '_measurement="daily_summary"'
+        try:
+            self.client.delete_api().delete(
+                start=delete_start,
+                stop=delete_stop,
+                predicate=predicate,
+                bucket=self.bucket,
+                org=self.org,
+            )
+            logger.info("[DailySummary] 已删除旧记录: %s ~ %s", delete_start, delete_stop)
+        except Exception as e:
+            logger.error("[DailySummary] 删除旧记录失败: %s", e, exc_info=True)
+            raise
+
+        # 2) 临时覆盖 polling_interval
+        original_interval = self._polling_interval
+        if polling_interval is not None:
+            self._polling_interval = polling_interval
+            logger.info(
+                "[DailySummary] 临时覆盖 polling_interval: %s -> %s",
+                original_interval, polling_interval,
+            )
+
+        # 3) 逐天重算
+        success_count = 0
+        fail_count = 0
+        try:
+            current = start_dt
+            while current <= end_dt:
+                try:
+                    self.calculate_and_store_daily_summary(current)
+                    success_count += 1
+                except Exception as e:
+                    fail_count += 1
+                    logger.error(
+                        "[DailySummary] 重算 %s 失败: %s",
+                        current.strftime("%Y-%m-%d"), e, exc_info=True,
+                    )
+                current += timedelta(days=1)
+        finally:
+            # 4) 恢复原始 polling_interval
+            if polling_interval is not None:
+                self._polling_interval = original_interval
+                logger.info(
+                    "[DailySummary] 恢复 polling_interval: %s", original_interval,
+                )
+
+        result = {
+            "start_date": start_date,
+            "end_date": end_date,
+            "polling_interval_used": polling_interval if polling_interval else original_interval,
+            "total_days": total_days,
+            "success_count": success_count,
+            "fail_count": fail_count,
+        }
+        logger.info("[DailySummary] 强制重算完成: %s", result)
+        return result
 
 
 # ============================================================

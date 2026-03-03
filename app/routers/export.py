@@ -30,6 +30,7 @@ from typing import Optional, List
 
 from app.models.response import ApiResponse
 from app.services.data_export_service import get_export_service
+from app.services.daily_summary_service import get_daily_summary_service
 from app.tools.time_slice_tools import parse_days_parameter
 
 router = APIRouter(prefix="/api/export", tags=["数据导出统计"])
@@ -43,7 +44,8 @@ def export_all_runtime(
     start_time: Optional[str] = Query(None, description="开始时间 (ISO 8601格式)"),
     end_time: Optional[str] = Query(None, description="结束时间 (ISO 8601格式)"),
     days: Optional[int] = Query(7, description="查询最近N天（如果未指定start_time和end_time）"),
-    version: Optional[str] = Query("v3", description="版本选择: v1(实时计算), v3(优化版，推荐)")
+    version: Optional[str] = Query("v3", description="版本选择: v1(实时计算), v3(优化版，推荐)"),
+    force_recalculate: Optional[bool] = Query(False, description="是否强制重算 daily_summary (使用配置的轮询间隔)")
 ):
     """导出所有设备设备运行时长（按天）
     
@@ -117,6 +119,15 @@ def export_all_runtime(
             end_dt = datetime.now(timezone.utc)
             start_dt = end_dt - timedelta(days=days)
         
+        # 强制重算 daily_summary (如果请求)
+        if force_recalculate and version == "v3":
+            ds_service = get_daily_summary_service()
+            ds_service.force_recalculate_range(
+                start_date=start_dt.strftime("%Y-%m-%d"),
+                end_date=end_dt.strftime("%Y-%m-%d"),
+            )
+            logger.info("[Export] 强制重算 daily_summary 完成: %s ~ %s", start_dt, end_dt)
+
         # 选择服务版本
         if version == "v3":
             # V3: 优化版（使用预计算数据）

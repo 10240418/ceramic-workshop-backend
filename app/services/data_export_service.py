@@ -58,6 +58,11 @@ class DataExportService:
         self.bucket = settings.influx_bucket
         self.org = settings.influx_org
         self.power_threshold = 1.0  # 默认功率阈值 (kW)
+        # 从配置读取实际轮询间隔 (秒), 用于 count * interval 计算运行时长
+        self._polling_interval = settings.plc_poll_interval
+        # 移动平均窗口大小, 用于消除阈值边界抖动 (防抖)
+        # n=3 表示 3 个采样点的滑动平均, 即 15 秒窗口 (5s 轮询)
+        self._smoothing_window = 3
         # 独立设备运行阈值 (kW) - 覆盖默认值
         # SCR 氨水泵: 36W = 0.036kW, 风机: 500W = 0.5kW
         self._device_thresholds = {
@@ -565,6 +570,7 @@ class DataExportService:
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
             {module_filter}
             |> filter(fn: (r) => r["_field"] == "Pt")
+            |> movingAverage(n: {self._smoothing_window})
             |> filter(fn: (r) => r["_value"] > {self._get_power_threshold(device_id)})
             |> count()
         '''
@@ -578,12 +584,11 @@ class DataExportService:
                     running_points = record.get_value()
                     break
             
-            # 计算运行时间（假设数据采集间隔为6秒）
-            polling_interval_seconds = 6
-            runtime_seconds = running_points * polling_interval_seconds
+            # 计算运行时间 (轮询间隔从配置读取)
+            runtime_seconds = running_points * self._polling_interval
             runtime_hours = round(runtime_seconds / 3600, 2)
             
-            logger.debug("[Export] 计算运行时长: device_id=%s, module_tag=%s, points=%s, hours=%s", device_id, module_tag, running_points, runtime_hours)
+            logger.debug("[Export] 计算运行时长: device_id=%s, module_tag=%s, points=%s, interval=%.1fs, hours=%s", device_id, module_tag, running_points, self._polling_interval, runtime_hours)
             
             return runtime_hours
         except Exception as e:
@@ -618,6 +623,7 @@ class DataExportService:
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
             |> filter(fn: (r) => r["module_tag"] == "gas_meter")
             |> filter(fn: (r) => r["_field"] == "flow_rate")
+            |> movingAverage(n: {self._smoothing_window})
             |> filter(fn: (r) => r["_value"] > 0.01)
             |> count()
         '''
@@ -631,12 +637,11 @@ class DataExportService:
                     running_points = record.get_value()
                     break
             
-            # 计算运行时间（假设数据采集间隔为6秒）
-            polling_interval_seconds = 6
-            runtime_seconds = running_points * polling_interval_seconds
+            # 计算运行时间 (轮询间隔从配置读取)
+            runtime_seconds = running_points * self._polling_interval
             runtime_hours = round(runtime_seconds / 3600, 2)
             
-            logger.debug("[Export] 计算燃气表运行时长: device_id=%s, points=%s, hours=%s", device_id, running_points, runtime_hours)
+            logger.debug("[Export] 计算燃气表运行时长: device_id=%s, points=%s, interval=%.1fs, hours=%s", device_id, running_points, self._polling_interval, runtime_hours)
             
             return runtime_hours
         except Exception as e:
@@ -694,6 +699,7 @@ class DataExportService:
             |> filter(fn: (r) => r["device_id"] == "{device_id}")
             {module_filter}
             |> filter(fn: (r) => r["_field"] == "{field}")
+            |> movingAverage(n: {self._smoothing_window})
             |> filter(fn: (r) => r["_value"] > {threshold})
             |> aggregateWindow(every: 1d, fn: count, createEmpty: true, timeSrc: "_start")
         '''
@@ -706,8 +712,8 @@ class DataExportService:
                     ts = record.get_time()
                     date_str = ts.strftime("%Y-%m-%d")
                     count = record.get_value() or 0
-                    # 采样间隔 6 秒
-                    runtime_hours = round((count * 6) / 3600.0, 2)
+                    # 轮询间隔从配置读取
+                    runtime_hours = round((count * self._polling_interval) / 3600.0, 2)
                     result_map[date_str] = runtime_hours
             
             logger.debug(
@@ -1900,6 +1906,7 @@ class DataExportService:
                 |> filter(fn: (r) => r["device_id"] == "{device_id}")
                 |> filter(fn: (r) => r["module_tag"] == "{module_tag_filter}")
                 |> filter(fn: (r) => r["_field"] == "Pt")
+                |> movingAverage(n: {self._smoothing_window})
                 |> filter(fn: (r) => r["_value"] > {self._get_power_threshold(device_id)})
                 |> count()
             '''
@@ -1915,8 +1922,8 @@ class DataExportService:
                     count = record.get_value()
                     break
             
-            # 假设采样间隔为 6 秒
-            runtime_hours = (count * 6) / 3600.0
+            # 轮询间隔从配置读取
+            runtime_hours = (count * self._polling_interval) / 3600.0
             return round(runtime_hours, 2)
         
         except Exception as e:

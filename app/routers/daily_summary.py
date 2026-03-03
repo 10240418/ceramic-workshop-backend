@@ -6,6 +6,7 @@
 # 2. POST /api/daily-summary/fill-missing     - 检测并补全缺失日期
 # 3. GET  /api/daily-summary/available-dates  - 获取已有的日期列表
 # 4. GET  /api/daily-summary/query            - 查询日汇总数据
+# 5. GET  /api/daily-summary/recalculate      - 强制重算指定日期范围
 # ============================================================
 
 from fastapi import APIRouter, Query
@@ -25,7 +26,7 @@ router = APIRouter(prefix="/api/daily-summary", tags=["日汇总数据管理"])
 # 1. POST /api/daily-summary/calculate - 手动计算日汇总
 # ============================================================
 @router.post("/calculate")
-async def calculate_daily_summary(
+def calculate_daily_summary(
     target_date: Optional[str] = Query(None, description="目标日期 (YYYY-MM-DD)，默认为昨天")
 ):
     """手动计算并存储指定日期的汇总数据
@@ -86,7 +87,7 @@ async def calculate_daily_summary(
 # 2. POST /api/daily-summary/fill-missing - 补全缺失日期
 # ============================================================
 @router.post("/fill-missing")
-async def fill_missing_dates(
+def fill_missing_dates(
     end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)，默认为昨天")
 ):
     """检测并补全缺失的日期数据
@@ -148,7 +149,7 @@ async def fill_missing_dates(
 # 3. GET /api/daily-summary/available-dates - 获取已有日期
 # ============================================================
 @router.get("/available-dates")
-async def get_available_dates():
+def get_available_dates():
     """获取已有的日期列表
     
     **功能说明**:
@@ -196,7 +197,7 @@ async def get_available_dates():
 # 4. GET /api/daily-summary/query - 查询日汇总数据
 # ============================================================
 @router.get("/query")
-async def query_daily_summary(
+def query_daily_summary(
     device_id: str = Query(..., description="设备ID"),
     metric_type: str = Query(..., description="指标类型 (electricity, gas, feeding, runtime)"),
     start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
@@ -267,4 +268,73 @@ async def query_daily_summary(
     except Exception as e:
         logger.error("[DailySummary] query daily summary failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"查询失败: {str(e)}")
+
+
+# ============================================================
+# 5. GET  /api/daily-summary/recalculate - 强制重算指定日期范围
+# ============================================================
+@router.get("/recalculate")
+def recalculate_daily_summary(
+    start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
+    polling_interval: Optional[float] = Query(
+        None,
+        description="轮询间隔(秒), 不传则使用配置值。历史6s数据传6.0, 当前5s数据传5.0"
+    ),
+):
+    """强制重算指定日期范围的日汇总数据 (GET - 浏览器直接调用)
+
+    **浏览器直接访问即可触发重算**:
+    ```
+    # 旧数据(6s间隔)重算:
+    http://localhost:8080/api/daily-summary/recalculate?start_date=2026-01-01&end_date=2026-02-28&polling_interval=6.0
+
+    # 新数据(5s间隔)重算:
+    http://localhost:8080/api/daily-summary/recalculate?start_date=2026-03-01&end_date=2026-03-02&polling_interval=5.0
+
+    # 使用配置默认值(5.0s)重算:
+    http://localhost:8080/api/daily-summary/recalculate?start_date=2026-03-01&end_date=2026-03-02
+    ```
+
+    **注意**:
+    - 该操作会删除再重写, 请确认日期范围正确
+    - 计算耗时约 1~3 秒/天, 大范围重算请耐心等待
+    - 最大支持 120 天, 超过请分批调用
+    - end_date 不能超过昨天 (今天的数据还不完整)
+    """
+    try:
+        # 1. 解析日期
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+
+        # 2. 安全检查: end_date 不能超过昨天
+        yesterday = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) - timedelta(days=1)
+        if end_dt > yesterday:
+            end_dt = yesterday
+            end_date = end_dt.strftime("%Y-%m-%d")
+            logger.info("[DailySummary] end_date 修正为昨天: %s", end_date)
+
+        # 3. 安全检查: 最大 120 天
+        total_days = (end_dt - start_dt).days + 1
+        if total_days > 120:
+            return ApiResponse.fail(
+                f"日期范围过大: {total_days}天, 最大支持120天。"
+                f"请分批调用, 如先调用 1月, 再调用 2月"
+            )
+
+        service = get_daily_summary_service()
+        result = service.force_recalculate_range(
+            start_date=start_date,
+            end_date=end_date,
+            polling_interval=polling_interval,
+        )
+        return ApiResponse.ok(result)
+
+    except ValueError as e:
+        return ApiResponse.fail(f"参数错误: {str(e)}")
+    except Exception as e:
+        logger.error("[DailySummary] recalculate failed: %s", e, exc_info=True)
+        return ApiResponse.fail(f"重算失败: {str(e)}")
 
