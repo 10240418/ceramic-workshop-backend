@@ -74,7 +74,7 @@ async def get_roller_info():
 # 2. GET /api/roller/realtime - 获取辊道窑实时数据（内存缓存）
 # ============================================================
 @router.get("/realtime")
-async def get_roller_realtime():
+def get_roller_realtime():
     """获取辊道窑所有温区和电表的实时数据（从内存缓存读取）
     
     **数据来源**: 内存缓存（由轮询服务实时更新）
@@ -111,7 +111,7 @@ async def get_roller_realtime():
 # 2.1 GET /api/roller/realtime/formatted - 格式化实时数据
 # ============================================================
 @router.get("/realtime/formatted")
-async def get_roller_realtime_formatted():
+def get_roller_realtime_formatted():
     """获取辊道窑格式化后的实时数据（前端友好格式）
     
     **返回结构**:
@@ -226,7 +226,7 @@ async def get_roller_realtime_formatted():
 # 3. GET /api/roller/history - 获取辊道窑历史数据
 # ============================================================
 @router.get("/history")
-async def get_roller_history(
+def get_roller_history(
     start: Optional[datetime] = Query(None, description="开始时间", example="2025-12-10T00:00:00"),
     end: Optional[datetime] = Query(None, description="结束时间", example="2025-12-10T23:59:59"),
     module_type: Optional[str] = Query(
@@ -301,7 +301,7 @@ async def get_roller_history(
 # 4. GET /api/roller/zone/{zone_id} - 获取指定温区实时数据
 # ============================================================
 @router.get("/zone/{zone_id}")
-async def get_zone_realtime(
+def get_zone_realtime(
     zone_id: str = Path(
         ..., 
         description="温区ID",

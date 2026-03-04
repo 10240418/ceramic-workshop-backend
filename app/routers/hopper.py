@@ -137,7 +137,7 @@ async def get_all_hoppers_realtime(
 # 2. GET /api/hopper/{device_id} - 获取料仓实时数据（内存缓存）
 # ============================================================
 @router.get("/{device_id}")
-async def get_hopper_realtime(
+def get_hopper_realtime(
     device_id: str = Path(
         ..., 
         description="料仓设备ID",
@@ -183,7 +183,7 @@ async def get_hopper_realtime(
 # 3. GET /api/hopper/{device_id}/history - 获取料仓历史数据（InfluxDB）
 # ============================================================
 @router.get("/{device_id}/history")
-async def get_hopper_history(
+def get_hopper_history(
     device_id: str = Path(..., description="料仓设备ID", example="short_hopper_1"),
     start: Optional[datetime] = Query(None, description="开始时间", example="2025-12-10T00:00:00"),
     end: Optional[datetime] = Query(None, description="结束时间", example="2025-12-10T23:59:59"),
@@ -276,7 +276,7 @@ async def get_hopper_history(
 # 2.5 GET /api/hopper/{device_id}/feeding-cumulative - 查询下料速度和投料总量历史
 # ============================================================
 @router.get("/{device_id}/feeding-cumulative")
-async def get_hopper_feeding_cumulative(
+def get_hopper_feeding_cumulative(
     device_id: str = Path(..., description="设备ID (如 short_hopper_1)"),
     start: Optional[datetime] = Query(None, description="开始时间"),
     end: Optional[datetime] = Query(None, description="结束时间"),
@@ -328,7 +328,7 @@ async def get_hopper_feeding_cumulative(
 # 3. GET /api/hopper/{device_id}/feeding-history
 # ============================================================
 @router.get("/{device_id}/feeding-history")
-async def get_hopper_feeding_history(
+def get_hopper_feeding_history(
     device_id: str = Path(..., description="设备ID (如 short_hopper_1)"),
     start: Optional[datetime] = Query(None, description="开始时间"),
     end: Optional[datetime] = Query(None, description="结束时间"),
@@ -364,7 +364,7 @@ async def get_hopper_feeding_history(
 # 4. POST /api/hopper/{device_id}/feeding-history/backfill - 客户端回填/校正投料记录
 # ============================================================
 @router.post("/{device_id}/feeding-history/backfill")
-async def backfill_hopper_feeding_record(
+def backfill_hopper_feeding_record(
     device_id: str,
     record: dict
 ):
@@ -413,7 +413,7 @@ async def backfill_hopper_feeding_record(
 # 5. DELETE /api/hopper/{device_id}/feeding-history - 删除错误的投料记录
 # ============================================================
 @router.delete("/{device_id}/feeding-history")
-async def delete_hopper_feeding_record(
+def delete_hopper_feeding_record(
     device_id: str = Path(..., description="设备ID"),
     time: datetime = Query(..., description="记录时间 (ISO format)"),
 ):
@@ -458,7 +458,7 @@ async def delete_hopper_feeding_record(
 # 6. DELETE /api/hopper/{device_id}/feeding-history/purge - 批量清理投料记录
 # ============================================================
 @router.delete("/{device_id}/feeding-history/purge")
-async def purge_hopper_feeding_records(
+def purge_hopper_feeding_records(
     device_id: str = Path(..., description="设备ID"),
     start: datetime = Query(..., description="开始时间 (ISO format)"),
     end: datetime = Query(..., description="结束时间 (ISO format)"),

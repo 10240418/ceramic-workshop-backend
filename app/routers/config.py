@@ -79,7 +79,7 @@ async def get_plc_config():
 # 3. PUT /plc - 更新PLC配置 (热更新)
 # ------------------------------------------------------------
 @router.put("/plc")
-async def update_plc_config(config: PLCConfigUpdate):
+def update_plc_config(config: PLCConfigUpdate):
     """更新PLC配置（热更新，无需重启）
     
     修改后立即生效：
@@ -154,7 +154,7 @@ async def update_plc_config(config: PLCConfigUpdate):
 # 4. POST /plc/test - 测试PLC连接
 # ------------------------------------------------------------
 @router.post("/plc/test")
-async def test_plc_connection():
+def test_plc_connection():
     """测试PLC连接（使用当前运行时配置）"""
     try:
         from app.plc.s7_client import get_s7_client
@@ -178,7 +178,7 @@ async def test_plc_connection():
 # 5. GET /db-mappings - 获取DB块映射配置
 # ------------------------------------------------------------
 @router.get("/db-mappings")
-async def get_db_mappings():
+def get_db_mappings():
     """获取所有DB块映射配置（动态配置核心）
     
     **返回**: 所有DB块的配置信息
@@ -245,7 +245,7 @@ async def get_db_mappings():
 # 8. GET /db/{db_number} - 获取指定DB块的设备配置
 # ------------------------------------------------------------
 @router.get("/db/{db_number}")
-async def get_db_devices_config(db_number: int):
+def get_db_devices_config(db_number: int):
     """获取指定DB块的所有设备配置
     
     **参数**:

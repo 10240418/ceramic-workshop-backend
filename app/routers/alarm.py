@@ -39,7 +39,7 @@ async def get_thresholds():
 # 2. PUT /api/alarm/thresholds - 更新阈值配置
 # ------------------------------------------------------------
 @router.put("/thresholds")
-async def update_thresholds(body: dict):
+def update_thresholds(body: dict):
     """
     接收前端推送的阈值字典，格式:
     {
@@ -62,7 +62,7 @@ async def update_thresholds(body: dict):
 # 3. GET /api/alarm/records - 查询历史报警记录
 # ------------------------------------------------------------
 @router.get("/records")
-async def get_alarm_records(
+def get_alarm_records(
     start: Optional[str] = Query(None, description="开始时间 ISO8601，如 2026-01-01T00:00:00Z"),
     end: Optional[str] = Query(None, description="结束时间 ISO8601"),
     level: Optional[str] = Query(None, description="报警级别: warning | alarm"),
@@ -95,7 +95,7 @@ async def get_alarm_records(
 # 4. GET /api/alarm/count - 统计报警数量
 # ------------------------------------------------------------
 @router.get("/count")
-async def get_count(
+def get_count(
     hours: int = Query(24, ge=1, le=168, description="统计时长（小时），最长7天"),
 ):
     """统计指定时长内的各级别报警数量"""

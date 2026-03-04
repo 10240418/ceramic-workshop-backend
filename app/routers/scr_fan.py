@@ -141,7 +141,7 @@ async def get_all_scr_realtime():
 # 2. GET /api/scr/{device_id} - 获取SCR实时数据（内存缓存）
 # ============================================================
 @router.get("/api/scr/{device_id}")
-async def get_scr_realtime(
+def get_scr_realtime(
     device_id: str = Path(..., description="SCR设备ID", example="scr_1")
 ):
     """获取指定SCR设备的实时数据（从内存缓存读取）
@@ -176,7 +176,7 @@ async def get_scr_realtime(
 # 3. GET /api/scr/{device_id}/history - 获取SCR历史数据
 # ============================================================
 @router.get("/api/scr/{device_id}/history")
-async def get_scr_history(
+def get_scr_history(
     device_id: str = Path(..., description="SCR设备ID", example="scr_1"),
     start: Optional[datetime] = Query(None, description="开始时间", example="2025-12-10T00:00:00"),
     end: Optional[datetime] = Query(None, description="结束时间", example="2025-12-10T23:59:59"),
@@ -271,7 +271,7 @@ async def get_all_fans_realtime():
 # 5. GET /api/fan/{device_id} - 获取风机实时数据（内存缓存）
 # ============================================================
 @router.get("/api/fan/{device_id}")
-async def get_fan_realtime(
+def get_fan_realtime(
     device_id: str = Path(..., description="风机设备ID", example="fan_1")
 ):
     """获取指定风机的实时数据（从内存缓存读取）
@@ -307,7 +307,7 @@ async def get_fan_realtime(
 # 6. GET /api/fan/{device_id}/history - 获取风机历史数据
 # ============================================================
 @router.get("/api/fan/{device_id}/history")
-async def get_fan_history(
+def get_fan_history(
     device_id: str = Path(..., description="风机设备ID", example="fan_1"),
     start: Optional[datetime] = Query(None, description="开始时间", example="2025-12-10T00:00:00"),
     end: Optional[datetime] = Query(None, description="结束时间", example="2025-12-10T23:59:59"),

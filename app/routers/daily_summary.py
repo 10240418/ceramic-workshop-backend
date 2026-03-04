@@ -7,6 +7,7 @@
 # 3. GET  /api/daily-summary/available-dates  - 获取已有的日期列表
 # 4. GET  /api/daily-summary/query            - 查询日汇总数据
 # 5. GET  /api/daily-summary/recalculate      - 强制重算指定日期范围
+# 6. GET  /api/daily-summary/runtime-inspect  - 诊断: 查看全部设备运行时长数据
 # ============================================================
 
 from fastapi import APIRouter, Query
@@ -14,10 +15,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import logging
 
+from app.tools.timezone_tools import BEIJING_TZ
 from app.models.response import ApiResponse
+from app.services.daily_summary_service import get_daily_summary_service
 
 logger = logging.getLogger(__name__)
-from app.services.daily_summary_service import get_daily_summary_service
 
 router = APIRouter(prefix="/api/daily-summary", tags=["日汇总数据管理"])
 
@@ -248,9 +250,9 @@ def query_daily_summary(
     ```
     """
     try:
-        # 解析日期
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        # 解析日期 (使用北京时区, 日汇总 timestamp 基于北京自然日零点)
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ)
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ)
         
         # 调用服务查询
         service = get_daily_summary_service()
@@ -303,12 +305,19 @@ def recalculate_daily_summary(
     - end_date 不能超过昨天 (今天的数据还不完整)
     """
     try:
-        # 1. 解析日期
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        # 1. 解析日期 (使用北京时区, 因为日汇总基于北京自然日)
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ)
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ)
 
-        # 2. 安全检查: end_date 不能超过昨天
-        yesterday = datetime.now(timezone.utc).replace(
+        # 2. 安全检查: start_date 不能大于 end_date
+        if start_dt > end_dt:
+            return ApiResponse.fail(
+                f"日期范围错误: start_date({start_date}) > end_date({end_date}), "
+                f"请检查参数顺序"
+            )
+
+        # 3. 安全检查: end_date 不能超过昨天 (北京时间)
+        yesterday = datetime.now(BEIJING_TZ).replace(
             hour=0, minute=0, second=0, microsecond=0
         ) - timedelta(days=1)
         if end_dt > yesterday:
@@ -316,7 +325,7 @@ def recalculate_daily_summary(
             end_date = end_dt.strftime("%Y-%m-%d")
             logger.info("[DailySummary] end_date 修正为昨天: %s", end_date)
 
-        # 3. 安全检查: 最大 120 天
+        # 4. 安全检查: 最大 120 天
         total_days = (end_dt - start_dt).days + 1
         if total_days > 120:
             return ApiResponse.fail(
@@ -338,3 +347,51 @@ def recalculate_daily_summary(
         logger.error("[DailySummary] recalculate failed: %s", e, exc_info=True)
         return ApiResponse.fail(f"重算失败: {str(e)}")
 
+
+# ============================================================
+# 6. GET /runtime-inspect - 诊断: 查看全部设备运行时长数据
+# ============================================================
+@router.get("/runtime-inspect")
+async def runtime_inspect(
+    start_date: str = Query(..., description="开始日期 (YYYY-MM-DD)"),
+    end_date: str = Query(..., description="结束日期 (YYYY-MM-DD)"),
+):
+    """诊断接口: 查看 daily_summary 中存储的全部设备运行时长数据 (GET - 浏览器直接调用)
+
+    **用法示例**:
+    ```
+    http://localhost:8080/api/daily-summary/runtime-inspect?start_date=2026-03-01&end_date=2026-03-04
+    ```
+
+    返回 daily_summary 表中全部设备、全部指标类型的数据, 按日期分组展示,
+    便于检查数据库中实际存储的运行时长、电量、投料等汇总值。
+    """
+    try:
+        # 1. 解析日期进行基本校验
+        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+
+        if start_dt > end_dt:
+            return ApiResponse.fail(
+                f"日期范围错误: start_date({start_date}) > end_date({end_date})"
+            )
+
+        total_days = (end_dt - start_dt).days + 1
+        if total_days > 120:
+            return ApiResponse.fail(
+                f"日期范围过大: {total_days}天, 最大支持120天"
+            )
+
+        # 2. 调用 service 查询
+        service = get_daily_summary_service()
+        result = service.get_all_runtime_inspect(
+            start_date=start_date,
+            end_date=end_date,
+        )
+        return ApiResponse.ok(result)
+
+    except ValueError as e:
+        return ApiResponse.fail(f"日期格式错误: {str(e)}, 请使用 YYYY-MM-DD 格式")
+    except Exception as e:
+        logger.error("[DailySummary] runtime-inspect failed: %s", e, exc_info=True)
+        return ApiResponse.fail(f"查询失败: {str(e)}")

@@ -58,11 +58,14 @@ class DataExportService:
         self.bucket = settings.influx_bucket
         self.org = settings.influx_org
         self.power_threshold = 1.0  # 默认功率阈值 (kW)
-        # 从配置读取实际轮询间隔 (秒), 用于 count * interval 计算运行时长
+        # 从配置读取实际轮询间隔 (秒), 用于 elapsed() 断连阈值计算
         self._polling_interval = settings.plc_poll_interval
         # 移动平均窗口大小, 用于消除阈值边界抖动 (防抖)
         # n=3 表示 3 个采样点的滑动平均, 即 15 秒窗口 (5s 轮询)
         self._smoothing_window = 3
+        # 小时补齐阈值 (秒): 某小时内运行时长 >= 此值则补齐为 3600s (1h)
+        # 3240 = 0.9 * 3600, 即每小时运行 >= 54 分钟计为整小时
+        self._hour_round_threshold = 3240
         # 独立设备运行阈值 (kW) - 覆盖默认值
         # SCR 氨水泵: 36W = 0.036kW, 风机: 500W = 0.5kW
         self._device_thresholds = {
@@ -547,22 +550,30 @@ class DataExportService:
         end_time: datetime,
         module_tag: Optional[str] = None
     ) -> float:
-        """计算指定时间段内的运行时长
-        
+        """计算指定时间段内的运行时长 (elapsed 算法, 与 daily_summary_service 统一)
+
+        算法: elapsed() 实际时差累加 + 小时补齐
+        1. 对相邻数据点计算真实时间差 (elapsed, 单位秒)
+        2. 只累加: 当前点 Pt > threshold (设备运行) AND elapsed <= max_gap (排除断连)
+        3. 按小时分窗 (window 1h), 每小时运行 >= 57 分钟 (0.95h) 则补齐为 60 分钟
+        4. max_gap = polling_interval * 12, 超过视为 PLC 断连或停机间隔
+
         Args:
             device_id: 设备ID
             start_time: 开始时间
             end_time: 结束时间
-            module_tag: 模块标签（可选，用于辊道窑分区和SCR燃气表）
-            
+            module_tag: 模块标签 (可选, 用于辊道窑分区和SCR)
+
         Returns:
-            运行时长（小时）
+            运行时长 (小时)
         """
-        # 构建查询条件
+        max_gap_seconds = self._polling_interval * 12
+        threshold = self._get_power_threshold(device_id)
+
         module_filter = ""
         if module_tag:
             module_filter = f'|> filter(fn: (r) => r["module_tag"] == "{module_tag}")'
-        
+
         query = f'''
         from(bucket: "{self.bucket}")
             |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
@@ -571,25 +582,30 @@ class DataExportService:
             {module_filter}
             |> filter(fn: (r) => r["_field"] == "Pt")
             |> movingAverage(n: {self._smoothing_window})
-            |> filter(fn: (r) => r["_value"] > {self._get_power_threshold(device_id)})
-            |> count()
+            |> elapsed(unit: 1s, columnName: "dt")
+            |> filter(fn: (r) => r["_value"] > {threshold} and r["dt"] <= {max_gap_seconds})
+            |> map(fn: (r) => ({{r with _value: float(v: r.dt)}}))
+            |> window(every: 1h)
+            |> sum()
+            |> map(fn: (r) => ({{r with _value: if r._value >= {self._hour_round_threshold}.0 then 3600.0 else r._value}}))
+            |> group()
+            |> sum()
         '''
-        
+
         try:
             result = self.query_api.query(query)
-            running_points = 0
-            
+            total_seconds = 0.0
             for table in result:
                 for record in table.records:
-                    running_points = record.get_value()
+                    total_seconds = float(record.get_value() or 0)
                     break
-            
-            # 计算运行时间 (轮询间隔从配置读取)
-            runtime_seconds = running_points * self._polling_interval
-            runtime_hours = round(runtime_seconds / 3600, 2)
-            
-            logger.debug("[Export] 计算运行时长: device_id=%s, module_tag=%s, points=%s, interval=%.1fs, hours=%s", device_id, module_tag, running_points, self._polling_interval, runtime_hours)
-            
+                break
+
+            runtime_hours = round(total_seconds / 3600.0, 2)
+            logger.debug(
+                "[Export] 计算运行时长(elapsed): device_id=%s, module_tag=%s, seconds=%.0f, hours=%s",
+                device_id, module_tag, total_seconds, runtime_hours
+            )
             return runtime_hours
         except Exception as e:
             logger.warning("[Export] 计算 %s 运行时长失败: %s", device_id, e, exc_info=True)
@@ -605,17 +621,18 @@ class DataExportService:
         start_time: datetime,
         end_time: datetime
     ) -> float:
-        """计算SCR燃气表的运行时长（基于燃气流量）
-        
+        """计算SCR燃气表的运行时长 (elapsed 算法, 基于燃气流量)
+
         Args:
-            device_id: 设备ID（scr_1 或 scr_2）
+            device_id: 设备ID (scr_1 或 scr_2)
             start_time: 开始时间
             end_time: 结束时间
-            
+
         Returns:
-            运行时长（小时）
+            运行时长 (小时)
         """
-        # 查询燃气流量数据，流量 > 0.01 m³/h 表示运行中
+        max_gap_seconds = self._polling_interval * 12
+
         query = f'''
         from(bucket: "{self.bucket}")
             |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
@@ -624,25 +641,30 @@ class DataExportService:
             |> filter(fn: (r) => r["module_tag"] == "gas_meter")
             |> filter(fn: (r) => r["_field"] == "flow_rate")
             |> movingAverage(n: {self._smoothing_window})
-            |> filter(fn: (r) => r["_value"] > 0.01)
-            |> count()
+            |> elapsed(unit: 1s, columnName: "dt")
+            |> filter(fn: (r) => r["_value"] > 0.01 and r["dt"] <= {max_gap_seconds})
+            |> map(fn: (r) => ({{r with _value: float(v: r.dt)}}))
+            |> window(every: 1h)
+            |> sum()
+            |> map(fn: (r) => ({{r with _value: if r._value >= {self._hour_round_threshold}.0 then 3600.0 else r._value}}))
+            |> group()
+            |> sum()
         '''
-        
+
         try:
             result = self.query_api.query(query)
-            running_points = 0
-            
+            total_seconds = 0.0
             for table in result:
                 for record in table.records:
-                    running_points = record.get_value()
+                    total_seconds = float(record.get_value() or 0)
                     break
-            
-            # 计算运行时间 (轮询间隔从配置读取)
-            runtime_seconds = running_points * self._polling_interval
-            runtime_hours = round(runtime_seconds / 3600, 2)
-            
-            logger.debug("[Export] 计算燃气表运行时长: device_id=%s, points=%s, interval=%.1fs, hours=%s", device_id, running_points, self._polling_interval, runtime_hours)
-            
+                break
+
+            runtime_hours = round(total_seconds / 3600.0, 2)
+            logger.debug(
+                "[Export] 计算燃气表运行时长(elapsed): device_id=%s, seconds=%.0f, hours=%s",
+                device_id, total_seconds, runtime_hours
+            )
             return runtime_hours
         except Exception as e:
             logger.warning("[Export] 计算 %s 燃气表运行时长失败: %s", device_id, e, exc_info=True)
@@ -666,10 +688,11 @@ class DataExportService:
         threshold: float = None,
         module_tag: Optional[str] = None,
     ) -> Dict[str, float]:
-        """[Optimized] 使用 aggregateWindow(1d, count) 批量查询每日运行时长
-        
-        单次查询替代逐天循环, 性能提升 N 倍 (N = 天数)
-        
+        """[Optimized] elapsed() 算法批量查询每日运行时长
+
+        流程: elapsed -> filter(>threshold & dt<=max_gap) -> window(1h) -> sum
+              -> hourly_round(>=3420->3600) -> window(1d) -> sum -> 转小时
+
         Args:
             device_id: 设备ID
             start_time: 开始时间 (UTC)
@@ -677,21 +700,23 @@ class DataExportService:
             field: 判断运行的字段 (默认 "Pt")
             threshold: 运行阈值 (默认使用 self.power_threshold)
             module_tag: 模块标签 (可选, 用于辊道窑分区等)
-            
+
         Returns:
             {日期字符串: 运行时长小时} 如 {"2026-01-26": 18.5, "2026-01-27": 20.2}
         """
         if threshold is None:
             threshold = self._get_power_threshold(device_id)
-        
-        # 对齐到 UTC 日边界, 确保 aggregateWindow 窗口完整
+
+        max_gap_seconds = self._polling_interval * 12
+
+        # 对齐到 UTC 日边界, 确保窗口完整
         range_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
         range_end = end_time.replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
-        
+
         module_filter = ""
         if module_tag:
             module_filter = f'|> filter(fn: (r) => r["module_tag"] == "{module_tag}")'
-        
+
         query = f'''
         from(bucket: "{self.bucket}")
             |> range(start: {range_start.isoformat()}, stop: {range_end.isoformat()})
@@ -700,10 +725,16 @@ class DataExportService:
             {module_filter}
             |> filter(fn: (r) => r["_field"] == "{field}")
             |> movingAverage(n: {self._smoothing_window})
-            |> filter(fn: (r) => r["_value"] > {threshold})
-            |> aggregateWindow(every: 1d, fn: count, createEmpty: true, timeSrc: "_start")
+            |> elapsed(unit: 1s, columnName: "dt")
+            |> filter(fn: (r) => r["_value"] > {threshold} and r["dt"] <= {max_gap_seconds})
+            |> map(fn: (r) => ({{r with _value: float(v: r.dt)}}))
+            |> window(every: 1h)
+            |> sum()
+            |> map(fn: (r) => ({{r with _value: if r._value >= {self._hour_round_threshold}.0 then 3600.0 else r._value}}))
+            |> window(every: 1d)
+            |> sum()
         '''
-        
+
         result_map = {}
         try:
             result = self.query_api.query(query)
@@ -711,20 +742,19 @@ class DataExportService:
                 for record in table.records:
                     ts = record.get_time()
                     date_str = ts.strftime("%Y-%m-%d")
-                    count = record.get_value() or 0
-                    # 轮询间隔从配置读取
-                    runtime_hours = round((count * self._polling_interval) / 3600.0, 2)
+                    total_seconds = float(record.get_value() or 0)
+                    runtime_hours = round(total_seconds / 3600.0, 2)
                     result_map[date_str] = runtime_hours
-            
+
             logger.debug(
-                "[Export] 批量运行时长: device=%s, field=%s, days=%s",
+                "[Export] 批量运行时长(elapsed): device=%s, field=%s, days=%s",
                 device_id, field, len(result_map)
             )
         except Exception as e:
             logger.warning(
                 "[Export] 批量查询运行时长失败 (%s): %s", device_id, e, exc_info=True
             )
-        
+
         return result_map
     
     def _batch_query_daily_first_last(
@@ -1566,10 +1596,14 @@ class DataExportService:
                 for record in table.records:
                     device_id = record.values.get("device_id")
                     metric_type = record.values.get("metric_type")
-                    date = record.values.get("date")
+                    date_raw = record.values.get("date", "")
                     
-                    # [FIX] 兼容性处理：daily_summary 中已经做了映射
-                    # zone1~zone6 和 scr_1_pump, scr_2_pump 可以直接使用
+                    # [FIX] 日期格式统一: daily_summary 存储为 YYYYMMDD,
+                    # 但导出服务内部统一使用 YYYY-MM-DD 格式
+                    if date_raw and len(date_raw) == 8 and "-" not in date_raw:
+                        date = f"{date_raw[:4]}-{date_raw[4:6]}-{date_raw[6:8]}"
+                    else:
+                        date = date_raw
                     
                     if device_id not in data_by_device:
                         data_by_device[device_id] = {}
@@ -1886,46 +1920,57 @@ class DataExportService:
         start_time: datetime,
         end_time: datetime
     ) -> float:
-        """计算指定时间段的运行时长（支持 module_tag 过滤）
-        
+        """计算指定时间段的运行时长 (elapsed 算法, 支持 module_tag 过滤)
+
         Args:
             device_id: 实际设备ID
             module_tag_filter: 模块标签过滤
             start_time: 开始时间
             end_time: 结束时间
-            
+
         Returns:
-            运行时长（小时）
+            运行时长 (小时)
         """
-        # 构建查询（添加 module_tag 过滤）
-        if module_tag_filter:
-            query = f'''
-            from(bucket: "{self.bucket}")
-                |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
-                |> filter(fn: (r) => r["_measurement"] == "sensor_data")
-                |> filter(fn: (r) => r["device_id"] == "{device_id}")
-                |> filter(fn: (r) => r["module_tag"] == "{module_tag_filter}")
-                |> filter(fn: (r) => r["_field"] == "Pt")
-                |> movingAverage(n: {self._smoothing_window})
-                |> filter(fn: (r) => r["_value"] > {self._get_power_threshold(device_id)})
-                |> count()
-            '''
-        else:
-            # 无需过滤，使用原逻辑
+        if not module_tag_filter:
             return self._calculate_runtime_for_period(device_id, start_time, end_time)
-        
+
+        threshold = self._get_power_threshold(device_id)
+        max_gap_seconds = self._polling_interval * 12
+
+        query = f'''
+        from(bucket: "{self.bucket}")
+            |> range(start: {start_time.isoformat()}, stop: {end_time.isoformat()})
+            |> filter(fn: (r) => r["_measurement"] == "sensor_data")
+            |> filter(fn: (r) => r["device_id"] == "{device_id}")
+            |> filter(fn: (r) => r["module_tag"] == "{module_tag_filter}")
+            |> filter(fn: (r) => r["_field"] == "Pt")
+            |> movingAverage(n: {self._smoothing_window})
+            |> elapsed(unit: 1s, columnName: "dt")
+            |> filter(fn: (r) => r["_value"] > {threshold} and r["dt"] <= {max_gap_seconds})
+            |> map(fn: (r) => ({{r with _value: float(v: r.dt)}}))
+            |> window(every: 1h)
+            |> sum()
+            |> map(fn: (r) => ({{r with _value: if r._value >= {self._hour_round_threshold}.0 then 3600.0 else r._value}}))
+            |> group()
+            |> sum()
+        '''
+
         try:
             result = self.query_api.query(query)
-            count = 0
+            total_seconds = 0.0
             for table in result:
                 for record in table.records:
-                    count = record.get_value()
+                    total_seconds = float(record.get_value() or 0)
                     break
-            
-            # 轮询间隔从配置读取
-            runtime_hours = (count * self._polling_interval) / 3600.0
-            return round(runtime_hours, 2)
-        
+                break
+
+            runtime_hours = round(total_seconds / 3600.0, 2)
+            logger.debug(
+                "[Export] 运行时长(elapsed+filter): device=%s, module=%s, hours=%s",
+                device_id, module_tag_filter, runtime_hours
+            )
+            return runtime_hours
+
         except Exception as e:
             logger.warning("[Export] 计算运行时长失败 %s/%s: %s", device_id, module_tag_filter, e, exc_info=True)
             return 0.0
@@ -2004,8 +2049,10 @@ class DataExportService:
         # 3. 批量查询完整天的预计算数据
         precomputed_data = {}
         if full_day_slices:
-            start_date = datetime.strptime(full_day_slices[0].date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            end_date = datetime.strptime(full_day_slices[-1].date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            # [FIX] 使用北京时区解析日期, daily_summary 的 timestamp 是北京午夜转 UTC
+            # 错误: replace(tzinfo=timezone.utc) 会导致第一个完整天落在查询范围之外
+            start_date = datetime.strptime(full_day_slices[0].date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ).astimezone(timezone.utc)
+            end_date = (datetime.strptime(full_day_slices[-1].date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ) + timedelta(days=1)).astimezone(timezone.utc)
             
             # 确保数据已补全
             self._get_summary_service().check_and_fill_missing_dates(end_dt=end_date)
@@ -2153,11 +2200,11 @@ class DataExportService:
             # [FIX] 初始化所有日期的记录（确保每天都有数据）
             daily_records_map = {}
             for date in all_dates:
-                # [FIX] 为完整天填充默认时间（00:00:00 ~ 23:59:59）
+                # [FIX] 为完整天填充默认时间（00:00:00 ~ 23:59:59, 北京时间）
                 daily_records_map[date] = {
                     "date": date,
-                    "start_time": f"{date}T00:00:00+00:00",  # 完整天的起始时间（无微秒）
-                    "end_time": f"{date}T23:59:59+00:00",    # 完整天的终止时间（无微秒）
+                    "start_time": f"{date}T00:00:00+08:00",  # 完整天的起始时间（北京时区）
+                    "end_time": f"{date}T23:59:59+08:00",    # 完整天的终止时间（北京时区）
                     "gas_consumption": 0.0,
                     "feeding_amount": 0.0,
                     "electricity_consumption": 0.0,
@@ -2388,8 +2435,9 @@ class DataExportService:
         # 2. 批量查询完整天的预计算数据
         precomputed_data = {}
         if full_day_slices:
-            start_date = datetime.strptime(full_day_slices[0].date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
-            end_date = datetime.strptime(full_day_slices[-1].date, "%Y-%m-%d").replace(tzinfo=timezone.utc) + timedelta(days=1)
+            # [FIX] 使用北京时区解析日期, daily_summary 的 timestamp 是北京午夜转 UTC
+            start_date = datetime.strptime(full_day_slices[0].date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ).astimezone(timezone.utc)
+            end_date = (datetime.strptime(full_day_slices[-1].date, "%Y-%m-%d").replace(tzinfo=BEIJING_TZ) + timedelta(days=1)).astimezone(timezone.utc)
             
             # 确保数据已补全
             self._get_summary_service().check_and_fill_missing_dates(end_dt=end_date)

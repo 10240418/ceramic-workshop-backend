@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/devices", tags=["通用设备查询"])
 # 1. GET /db/{db_number}/realtime - 按DB块批量获取实时数据
 # ============================================================
 @router.get("/db/{db_number}/realtime")
-async def get_db_devices_realtime(
+def get_db_devices_realtime(
     db_number: int = Path(..., description="DB块号", example=8)
 ):
     """按DB块批量获取所有设备实时数据（终极优化方案）
@@ -142,7 +142,7 @@ async def get_db_devices_realtime(
 # 2. GET /db/{db_number}/list - 按DB块获取设备列表
 # ============================================================
 @router.get("/db/{db_number}/list")
-async def get_db_devices_list(
+def get_db_devices_list(
     db_number: int = Path(..., description="DB块号", example=8)
 ):
     """按DB块获取设备列表（不含实时数据）
