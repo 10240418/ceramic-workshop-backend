@@ -27,6 +27,7 @@
 # 10. get_all_feeding_data()      - 查询所有料仓数据快照
 # ============================================================
 
+import asyncio
 import logging
 from collections import deque
 from datetime import datetime, timezone
@@ -152,14 +153,25 @@ class FeedingAnalysisService:
     # 1. 启动时还原投料总量
     # ----------------------------------------------------------
     async def restore_from_db(self):
-        """从 InfluxDB last() 还原7个投料总量, 重启后不清零"""
-        try:
-            client = get_influx_client()
-            query_api = client.query_api()
-            bucket = settings.influx_bucket
+        """从 InfluxDB last() 还原7个投料总量, 重启后不清零
 
-            for dev in HOPPER_DEVICES:
-                query = f'''
+        [FIX] InfluxDB 查询在线程池中执行, 避免阻塞事件循环
+        """
+        try:
+            await asyncio.to_thread(self._sync_restore_from_db)
+            self._restored = True
+            logger.info("[Feeding] 投料总量还原完成")
+        except Exception as e:
+            logger.error(f"[Feeding] 还原投料总量失败: {e}", exc_info=True)
+
+    def _sync_restore_from_db(self):
+        """[FIX] 同步执行 InfluxDB 查询还原投料总量 (由 asyncio.to_thread 调用)"""
+        client = get_influx_client()
+        query_api = client.query_api()
+        bucket = settings.influx_bucket
+
+        for dev in HOPPER_DEVICES:
+            query = f'''
 from(bucket: "{bucket}")
     |> range(start: -90d)
     |> filter(fn: (r) => r["_measurement"] == "feeding_cumulative")
@@ -167,17 +179,12 @@ from(bucket: "{bucket}")
     |> filter(fn: (r) => r["_field"] == "feeding_total")
     |> last()
 '''
-                result = query_api.query(query)
-                for table in result:
-                    for record in table.records:
-                        val = float(record.get_value() or 0.0)
-                        self._feeding_total[dev] = val
-                        logger.info(f"[Feeding] {dev} 投料总量还原: {val:.1f} kg")
-
-            self._restored = True
-            logger.info("[Feeding] 投料总量还原完成")
-        except Exception as e:
-            logger.error(f"[Feeding] 还原投料总量失败: {e}", exc_info=True)
+            result = query_api.query(query)
+            for table in result:
+                for record in table.records:
+                    val = float(record.get_value() or 0.0)
+                    self._feeding_total[dev] = val
+                    logger.info(f"[Feeding] {dev} 投料总量还原: {val:.1f} kg")
 
     # ----------------------------------------------------------
     # 2. 每次轮询推入样本 (由 polling_service 调用)

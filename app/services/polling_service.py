@@ -307,11 +307,11 @@ async def _background_writer():
             
             _write_in_progress = True
             
-            # 检查 InfluxDB 健康状态
-            healthy, msg = check_influx_health()
+            # 检查 InfluxDB 健康状态 (在线程中执行，避免阻塞事件循环)
+            healthy, msg = await asyncio.to_thread(check_influx_health)
             
             if healthy:
-                success, err = write_points_batch(points)
+                success, err = await asyncio.to_thread(write_points_batch, points)
                 
                 if success:
                     _stats["successful_writes"] += len(points)
@@ -379,11 +379,14 @@ async def _poll_realtime_data_loop():
                     if db_num in _parsers:
                         devices = _parsers[db_num].parse_all(db_data)
                         all_devices.extend(devices)
-                        for device in devices:
-                            _update_latest_data(device, db_num, timestamp)
+                        # [FIX] 在线程中执行, 避免 push_sample/check_device_alarm
+                        # 触发的同步 InfluxDB 写入阻塞事件循环
+                        await asyncio.to_thread(
+                            _update_devices_batch, devices, db_num, timestamp
+                        )
             else:
                 for db_num, size in db_configs:
-                    success, db_data, err = plc.read_db(db_num, 0, size)
+                    success, db_data, err = await asyncio.to_thread(plc.read_db, db_num, 0, size)
                     if not success:
                         logger.error("[Polling] DB%d 读取失败: %s", db_num, err)
                         continue
@@ -391,8 +394,11 @@ async def _poll_realtime_data_loop():
                     if db_num in _parsers:
                         devices = _parsers[db_num].parse_all(db_data)
                         all_devices.extend(devices)
-                        for device in devices:
-                            _update_latest_data(device, db_num, timestamp)
+                        # [FIX] 在线程中执行, 避免 push_sample/check_device_alarm
+                        # 触发的同步 InfluxDB 写入阻塞事件循环
+                        await asyncio.to_thread(
+                            _update_devices_batch, devices, db_num, timestamp
+                        )
 
             global _latest_timestamp, _buffer_count
             _latest_timestamp = timestamp
@@ -500,7 +506,7 @@ async def _poll_device_status_loop():
                     db_name = db_cfg['db_name']
                     db_size = db_cfg['total_size']
 
-                    success, raw_data, err = plc.read_db(db_num, 0, db_size)
+                    success, raw_data, err = await asyncio.to_thread(plc.read_db, db_num, 0, db_size)
                     if success and raw_data:
                         _device_status_raw[f"db{db_num}"] = {
                             "db_number": db_num,
@@ -528,6 +534,17 @@ async def _poll_device_status_loop():
 # ============================================================
 # 更新内存缓存（供 API 直接读取）
 # ============================================================
+def _update_devices_batch(devices: list, db_number: int, timestamp: datetime):
+    """[FIX] 批量更新设备缓存 (由 asyncio.to_thread 调用)
+
+    将多个设备的 _update_latest_data 合并为一次线程调用,
+    避免 push_sample -> _write_cumulative_point 和
+    check_device_alarm -> log_alarm 中的同步 InfluxDB 写入阻塞事件循环.
+    """
+    for device in devices:
+        _update_latest_data(device, db_number, timestamp)
+
+
 def _update_latest_data(device_data: Dict[str, Any], db_number: int, timestamp: datetime):
     """更新内存缓存中的最新数据
     
@@ -729,9 +746,9 @@ async def start_polling():
     if settings.mock_mode:
         logger.info("[Polling] Mock模式 - 跳过PLC连接")
     else:
-        # 启动 PLC 长连接
+        # 启动 PLC 长连接 (在线程中执行，避免阻塞事件循环)
         plc = get_plc_manager()
-        success, err = plc.connect()
+        success, err = await asyncio.to_thread(plc.connect)
         if success:
             logger.info("[Polling] PLC 长连接已建立")
         else:
@@ -794,9 +811,9 @@ async def stop_polling():
     _write_task = None
     _write_queue = None
     
-    # 断开 PLC 长连接
+    # 断开 PLC 长连接 (在线程中执行，避免阻塞事件循环)
     plc = get_plc_manager()
-    plc.disconnect()
+    await asyncio.to_thread(plc.disconnect)
     
     logger.info("[Polling] 轮询服务已停止")
 

@@ -10,6 +10,7 @@
 
 from fastapi import APIRouter
 from datetime import datetime
+import asyncio
 import logging
 
 from config import get_settings
@@ -107,9 +108,13 @@ def database_health():
 # ------------------------------------------------------------
 @router.get("/health/polling")
 async def polling_health():
-    """轮询服务状态检查"""
+    """轮询服务状态检查
+
+    [FIX] get_polling_stats() 内部调用 plc.get_status() 会获取锁,
+    在线程池中执行避免阻塞事件循环
+    """
     try:
-        stats = get_polling_stats()
+        stats = await asyncio.to_thread(get_polling_stats)
         return ApiResponse.ok({
             "polling_running": is_polling_running(),
             **stats

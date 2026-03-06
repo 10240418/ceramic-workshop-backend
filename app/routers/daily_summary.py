@@ -13,6 +13,7 @@
 from fastapi import APIRouter, Query
 from datetime import datetime, timedelta, timezone
 from typing import Optional
+import asyncio
 import logging
 
 from app.tools.timezone_tools import BEIJING_TZ
@@ -383,8 +384,10 @@ async def runtime_inspect(
             )
 
         # 2. 调用 service 查询
+        # [FIX] InfluxDB 查询在线程池中执行, 避免阻塞事件循环
         service = get_daily_summary_service()
-        result = service.get_all_runtime_inspect(
+        result = await asyncio.to_thread(
+            service.get_all_runtime_inspect,
             start_date=start_date,
             end_date=end_date,
         )
